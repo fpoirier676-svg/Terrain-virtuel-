@@ -1,5 +1,5 @@
 // Service worker : permet d'ouvrir l'application sans connexion une fois visitée.
-const CACHE = 'mon-terrain-v1';
+const CACHE = 'mon-terrain-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png',
   'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js',
   'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js',

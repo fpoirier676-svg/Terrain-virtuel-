@@ -554,9 +554,20 @@ function applyLidar(s){
   s.terrain.elev=JSON.parse(JSON.stringify(LIDAR.elev)); s.terrain.north=3.9;
   s.terrain.lidar={tile:LIDAR.meta.tile,date:LIDAR.meta.date,crs:LIDAR.meta.crs,rot:LIDAR.meta.rot,house:LIDAR.meta.house,corners:LIDAR.meta.corners};
   const H=LIDAR.heights;
-  s.zones.forEach(z=>{ const top=H[z.name]; if(top==null) return; const roof=(z.type==='batiment'||z.type==='serre')? Math.min(z.w,z.d)*.32 : 0; const hh=+(top-roof).toFixed(2); if(hh>1.2 && hh<8) z.h=hh; });
+  s.zones.forEach(z=>{ const top=H[z.name]; if(top==null) return; const roof=(z.type==='batiment'||z.type==='serre')? (z.roofH ?? Math.min(z.w,z.d)*.32) : 0; if(z.style==='normand') return; const hh=+(top-roof).toFixed(2); if(hh>1.2 && hh<8) z.h=hh; });
   if(!s.plants.some(p=>p.sp==='arbre-ex-f'||p.sp==='arbre-ex-c')) LIDAR.trees.forEach(t=>s.plants.push({id:uid(),sp:t.sp,x:t.x,z:t.z,h:t.h,w:t.w,date:'1990-06-01',note:`Mesuré au LiDAR (avril 2023) : ${String(t.h).replace('.',',')} m de haut.`,lidar:true}));
   s.site.lat=48.4645; s.site.lon=-70.9935; s.terrain.lat=48.4645;
+  return s;
+}
+function styleBuildings(s){
+  s.zones.forEach(z=>{
+    if(z.style) return;
+    if(/^Maison \(n° 70/.test(z.name)){ Object.assign(z,{style:'normand',h:3.0,roofH:4.05,color:'#efe8da',roofColor:'#b4552f',note:'Style normand, 1 ½ étage, grande lucarne. Toiture d\'acier galvanisé imitation tuiles françaises, couleur terracotta (1999). Revêtement de stuc. Construite en 1978-1979.'}); }
+    else if(/^Remise/.test(z.name)){ Object.assign(z,{style:'pignon',color:'#f3f0e8',roofColor:'#6a625a'}); if(/^Remise est/.test(z.name)) z.note='Remise en clin de bois blanc avec serre et pavillon de rangement pour le jardinage. Toiture refaite vers 2022.'; }
+    else if(z.type==='serre'){ z.style='pignon'; if(z.h>3) z.h=2.3; }
+    else if(/^Abri d/.test(z.name)){ Object.assign(z,{style:'octogone',color:'#f1ece0',roofColor:'#6a625a'}); }
+    else if(z.name==='Spa'){ Object.assign(z,{style:'japonais',note:'Spa 5 places sous un abri de style japonais (shoji), accessible depuis le patio.'}); }
+  });
   return s;
 }
 function realState(){
@@ -565,7 +576,7 @@ function realState(){
   s.terrain.w=REAL.w; s.terrain.d=REAL.d; s.terrain.lots=JSON.parse(JSON.stringify(REAL.lots)); s.terrain.markers=JSON.parse(JSON.stringify(REAL.markers));
   s.zones=REAL.zones.map(z=>Object.assign({id:uid(),rot:0,h:(ZT[z.type]||ZT.platebande).h},z));
   s.plants=REAL.plants.map(p=>Object.assign({id:uid()},p));
-  s.site.lot='5 511 832 et 5 511 834'; s.site.area=3237.2; applyLidar(s);
+  s.site.lot='5 511 832 et 5 511 834'; s.site.area=3237.2; styleBuildings(s); applyLidar(s);
   s.site.note='Certificat de localisation (minute 8044, Gaétan Taillon a.-g., 20 déc. 2019). Lot 5 511 832 : 2 341,3 m² (sud 46,15 m, ouest 58,04 m, nord 34,73 m, est 60,93 m). Lot 5 511 834 : 895,9 m², vacant (nord 38,28 m, ouest 27,43 m, sud 28,65 m, est 28,01 m). Le nord du terrain est en zone de contrainte et de protection « talus roc ». Clôtures ouest et nord à l\'intérieur du lot. Servitude d\'utilité publique (1951) en faveur de la Compagnie Électrique du Saguenay. Limite ouest bornée (procès-verbal 1983).';
   return s;
 }
@@ -573,6 +584,7 @@ function lotsArea(){ const L=state.terrain.lots; return (L&&L.length)? L.reduce(
 function polyArea(p){ let a=0; for(let i=0;i<p.length;i++){ const [x1,z1]=p[i],[x2,z2]=p[(i+1)%p.length]; a+=x1*z2-x2*z1; } return Math.abs(a)/2; }
 function migrate(s){
   const b=blankState();
+  if(s.terrain && s.terrain.lots) styleBuildings(s);
   if(s.terrain && s.terrain.lots && !s.terrain.elev){ s.site=Object.assign({},b.site,s.site||{}); applyLidar(s); }
   s.site=Object.assign({},b.site,s.site||{}); s.media=s.media||[]; s.models=s.models||[]; s.tasks=s.tasks||[]; s.done=s.done||{}; s.harvests=s.harvests||[];
   s.terrain=Object.assign({},b.terrain,s.terrain||{});
@@ -797,6 +809,22 @@ function applyPhoto(){
   } else photoPlane.visible=false;
   photoPlane.material.opacity=state.terrain.photoOp;
 }
+function roofGeo(w,d,H,type,o){
+  // toit à quatre versants (croupe) ou à deux versants (pignon), avec débord o
+  const W=w+2*o, D=d+2*o, along=W>=D; const L=along?W:D, S=along?D:W; const half=S/2;
+  const r = type==='pignon' ? L/2 : Math.max(0,(L-S)/2);
+  const P=(a,b,y)=> along? [a,y,b] : [b,y,a];
+  const v=[]; const tri=(A,B,C)=>v.push(...A,...B,...C);
+  const A=P(-L/2,-half,0),B=P(L/2,-half,0),C=P(L/2,half,0),Dd=P(-L/2,half,0),R1=P(-r,0,H),R2=P(r,0,H);
+  tri(A,R2,B); tri(A,R1,R2); tri(Dd,C,R2); tri(Dd,R2,R1);
+  if(type!=='pignon'){ tri(B,R2,C); tri(A,Dd,R1); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(v,3)); g.computeVertexNormals(); return g;
+}
+function gableEnds(w,d,H){ // triangles de pignon (murs) pour un toit à deux versants
+  const along=w>=d, L=along?w:d, S=along?d:w; const P=(a,b,y)=> along? [a,y,b] : [b,y,a]; const v=[];
+  for(const e of [-1,1]){ v.push(...P(e*L/2,-S/2,0),...P(e*L/2,S/2,0),...P(e*L/2,0,H)); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(v,3)); g.computeVertexNormals(); return g;
+}
 function zoneMeshes(z){
   const t=ZT[z.type]||ZT.platebande; const g=new THREE.Group(); const h=Math.max(.01,z.h??t.h);
   const mat=new THREE.MeshStandardMaterial({color:z.color||t.border||t.col,roughness:t.glass?.2:.95,transparent:!!t.glass||z.type==='reseau',opacity:t.glass?.55:(z.type==='reseau'?.75:1)});
@@ -818,9 +846,40 @@ function zoneMeshes(z){
     soil.position.y=h+.005; soil.receiveShadow=true; g.add(soil);
   }
   if(z.type==='batiment'||z.type==='serre'){
-    const rh=Math.min(z.w,z.d)*.32;
-    const roof=new THREE.Mesh(new THREE.ConeGeometry(1,1,4).rotateY(Math.PI/4).translate(0,.5,0),new THREE.MeshStandardMaterial({color:t.roof,roughness:.8,flatShading:true}));
-    roof.scale.set(z.w/Math.SQRT2*1.04,rh,z.d/Math.SQRT2*1.04); roof.position.y=h; roof.castShadow=true; g.add(roof);
+    const rh=z.roofH ?? Math.min(z.w,z.d)*.32; const rc=z.roofColor||t.roof;
+    const rmat=new THREE.MeshStandardMaterial({color:rc,roughness:t.glass?.2:.6,metalness:z.style==='normand'?.25:0,flatShading:true,side:THREE.DoubleSide,transparent:!!t.glass,opacity:t.glass?.6:1});
+    const wmat=new THREE.MeshStandardMaterial({color:z.color||t.border||t.col,roughness:.9,side:THREE.DoubleSide,transparent:!!t.glass,opacity:t.glass?.55:1});
+    if(z.style==='octogone'){
+      g.remove(g.children[0]); const r=Math.min(z.w,z.d)/2;
+      const wall=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,8,1,true).translate(0,h/2,0),new THREE.MeshStandardMaterial({color:z.color||'#f1ece0',transparent:true,opacity:.35,side:THREE.DoubleSide}));
+      const roof=new THREE.Mesh(new THREE.ConeGeometry(r*1.12,rh,8).translate(0,h+rh/2,0),rmat); roof.castShadow=true;
+      for(let i=0;i<8;i++){ const a=i/8*Math.PI*2; const post=new THREE.Mesh(new THREE.BoxGeometry(.12,h,.12),new THREE.MeshStandardMaterial({color:'#e9e2d2'})); post.position.set(Math.cos(a)*r,h/2,Math.sin(a)*r); post.castShadow=true; g.add(post); }
+      g.add(wall,roof);
+    } else {
+      const type = z.style==='pignon' ? 'pignon' : 'croupe';
+      const roof=new THREE.Mesh(roofGeo(z.w,z.d,rh,type,z.style==='normand'?.45:.2),rmat); roof.position.y=h; roof.castShadow=true; g.add(roof);
+      if(type==='pignon'){ const ge=new THREE.Mesh(gableEnds(z.w,z.d,rh),wmat); ge.position.y=h; g.add(ge); }
+      if(z.style==='normand'){
+        // grande lucarne en façade (côté rue) et cheminée du foyer
+        const dw=Math.min(4.2,z.w*.34), dh=1.9, dd=z.d/2;
+        const dorm=new THREE.Mesh(new THREE.BoxGeometry(dw,dh,dd),wmat); dorm.position.set(0,h+dh/2,z.d/2-dd/2); dorm.castShadow=true; g.add(dorm);
+        const dr=new THREE.Mesh(roofGeo(dd,dw,1.1,'pignon',.15),rmat); dr.rotation.y=Math.PI/2; dr.position.set(0,h+dh,z.d/2-dd/2); dr.castShadow=true; g.add(dr);
+        const de=new THREE.Mesh(gableEnds(dd,dw,1.1),wmat); de.rotation.y=Math.PI/2; de.position.set(0,h+dh,z.d/2-dd/2); g.add(de);
+        const winMat=new THREE.MeshStandardMaterial({color:'#3a4a55',roughness:.2,metalness:.3});
+        const win=new THREE.Mesh(new THREE.BoxGeometry(dw*.55,1.1,.06),winMat); win.position.set(0,h+dh*.55,z.d/2+.01); g.add(win);
+        for(const [x,zz] of [[-z.w*.3,z.d/2],[z.w*.3,z.d/2],[-z.w*.3,-z.d/2],[z.w*.3,-z.d/2],[0,-z.d/2]]){ const wn=new THREE.Mesh(new THREE.BoxGeometry(1.3,1.2,.06),winMat); wn.position.set(x,1.5,zz+(zz>0?.01:-.01)); g.add(wn); }
+        const door=new THREE.Mesh(new THREE.BoxGeometry(1,2.1,.06),new THREE.MeshStandardMaterial({color:'#6b4a33'})); door.position.set(z.w*.08,1.05,z.d/2+.02); g.add(door);
+        const ch=new THREE.Mesh(new THREE.BoxGeometry(.7,rh+1.2,.7),new THREE.MeshStandardMaterial({color:'#8f8578',roughness:.9})); ch.position.set(-z.w*.28,h+(rh+1.2)/2,-z.d*.12); ch.castShadow=true; g.add(ch);
+      }
+    }
+  }
+  if(z.style==='japonais'){
+    const ph=2.3, w2=z.w+.5, d2=z.d+.5; const wood=new THREE.MeshStandardMaterial({color:'#4a3b30',roughness:.8});
+    for(const [a,b] of [[-1,-1],[1,-1],[1,1],[-1,1]]){ const post=new THREE.Mesh(new THREE.BoxGeometry(.14,ph,.14),wood); post.position.set(a*w2/2,ph/2,b*d2/2); post.castShadow=true; g.add(post); }
+    const roof=new THREE.Mesh(roofGeo(w2,d2,.7,'croupe',.35),new THREE.MeshStandardMaterial({color:'#3b332d',roughness:.7,flatShading:true,side:THREE.DoubleSide})); roof.position.y=ph; roof.castShadow=true; g.add(roof);
+    const shoji=new THREE.MeshStandardMaterial({color:'#f3ead8',transparent:true,opacity:.7,side:THREE.DoubleSide});
+    const p1=new THREE.Mesh(new THREE.PlaneGeometry(w2,ph*.8),shoji); p1.position.set(0,ph*.45,-d2/2); g.add(p1);
+    const p2=new THREE.Mesh(new THREE.PlaneGeometry(d2,ph*.8),shoji); p2.rotation.y=Math.PI/2; p2.position.set(-w2/2,ph*.45,0); g.add(p2);
   }
   g.children.forEach(c=>c.userData.zid=z.id);
   const [wx,wz]=toW(z.x,z.z); g.position.set(wx,gy,wz); g.rotation.y=-(z.rot||0)*Math.PI/180;
@@ -890,7 +949,7 @@ function updateSelOutline(){
   if(selOutline){ helpGroup.remove(selOutline); selOutline.geometry.dispose(); selOutline=null; }
   if(view.sel?.kind!=='zone') return;
   const z=state.zones.find(z=>z.id===view.sel.id); if(!z) return;
-  const h=(z.h??ZT[z.type].h)+(z.type==='batiment'? Math.min(z.w,z.d)*.32:0);
+  const h=(z.h??ZT[z.type].h)+((z.type==='batiment'||z.type==='serre')? (z.roofH ?? Math.min(z.w,z.d)*.32):0);
   selOutline=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(z.w+.08,h+.08,z.d+.08)),new THREE.LineBasicMaterial({color:new THREE.Color(cssVar('--pollen')||'#b97d14')}));
   const [wx,wz]=toW(z.x,z.z); selOutline.position.set(wx,h/2+elevAt(z.x,z.z),wz); selOutline.rotation.y=-(z.rot||0)*Math.PI/180; helpGroup.add(selOutline);
 }
@@ -1384,7 +1443,8 @@ function zoneSheet(z){
     <div class="row"><div class="field"><label for="zW">Largeur (m)</label><input id="zW" type="number" step="0.1" min="0.2" value="${z.w}"></div><div class="field"><label for="zD">Profondeur (m)</label><input id="zD" type="number" step="0.1" min="0.2" value="${z.d}"></div></div>
     <div class="row"><div class="field"><label for="zH">Hauteur (m)</label><input id="zH" type="number" step="0.05" min="0" value="${z.h??t.h}"></div><div class="field"><label for="zR">Angle (°)</label><input id="zR" type="number" step="5" value="${z.rot||0}"></div></div>
     <div class="row"><div class="field"><label for="zX">Centre x (m)</label><input id="zX" type="number" step="0.1" value="${z.x}"></div><div class="field"><label for="zZ">Centre y (m)</label><input id="zZ" type="number" step="0.1" value="${z.z}"></div></div>
-    <div class="field"><label for="zCol">Couleur</label><input id="zCol" type="color" value="${z.color||t.border||t.col}"></div>
+    <div class="field"><label for="zCol">Couleur ${(z.type==='batiment'||z.type==='serre')?'des murs':''}</label><input id="zCol" type="color" value="${z.color||t.border||t.col}"></div>
+    ${(z.type==='batiment'||z.type==='serre')?`<div class="row"><div class="field"><label for="zStyle">Style</label><select id="zStyle">${[['','Toit en croupe'],['normand','Normand avec lucarne'],['pignon','Toit à deux versants'],['octogone','Pavillon octogonal']].map(([v,l])=>`<option value="${v}" ${(z.style||'')===v?'selected':''}>${l}</option>`).join('')}</select></div><div class="field"><label for="zRH">Hauteur du toit (m)</label><input id="zRH" type="number" step="0.1" min="0.2" value="${z.roofH ?? +(Math.min(z.w,z.d)*.32).toFixed(2)}"></div><div class="field"><label for="zRC">Couleur du toit</label><input id="zRC" type="color" value="${z.roofColor||t.roof||'#5b524a'}"></div></div>`:''}
     <p class="hint num">Surface : ${fmt(z.w*z.d,1)} m² · périmètre ${fmt(2*(z.w+z.d),1)} m</p>
     ${canFill?`<div class="banner"><b>Remplir selon l'espacement</b><div class="row" style="margin-top:6px"><div class="field"><label for="fillSp">Plante</label><select id="fillSp">${suggestions.map(s=>`<option value="${s.id}">${esc(s.n)} (${fmt(s.sp,2)} m)</option>`).join('')}</select></div><div class="field"><label for="fillDate">Date</label><input id="fillDate" type="date" value="${iso(view.y,5,20)}"></div></div><button class="btn primary" id="fillBtn" style="margin-top:8px">Remplir la zone</button></div>`:''}
     ${inside.length?`<div><p style="margin:0 0 4px;font-size:12px;color:var(--muted)">Plantes dans cette zone</p><div class="list">${Object.entries(cnt).map(([k,n])=>{const [sp,y]=k.split('|');return `<div class="li"><span>${esc(SP[sp].n)} <span class="num">×${n}</span></span><span class="num">${y}</span></div>`;}).join('')}</div></div>`:''}
@@ -1394,6 +1454,7 @@ function zoneSheet(z){
   $('#zName').onchange=e=>commit(()=>z.name=e.target.value,{scene:false});
   num('#zW','w',.2); num('#zD','d',.2); num('#zH','h',0); num('#zR','rot'); num('#zX','x'); num('#zZ','z');
   $('#zCol').onchange=e=>commit(()=>z.color=e.target.value);
+  if($('#zStyle')){ $('#zStyle').onchange=e=>commit(()=>z.style=e.target.value||undefined); num('#zRH','roofH',.2); $('#zRC').onchange=e=>commit(()=>z.roofColor=e.target.value); }
   $('#zNote').onchange=e=>commit(()=>z.note=e.target.value,{scene:false});
   $('#zDup').onclick=()=>{ const q={...z,id:uid(),name:z.name+' (copie)',x:clamp(z.x+z.w+.5,0,state.terrain.w)}; commit(()=>state.zones.push(q)); select({kind:'zone',id:q.id}); };
   $('#zDel').onclick=async()=>{ const n=inside.length; const alsoPlants = n? await ask('Supprimer la zone ?',`${n} plante(s) s'y trouvent. Elles seront aussi retirées.`,'Supprimer'): true; if(!alsoPlants) return; commit(()=>{ state.zones=state.zones.filter(q=>q.id!==z.id); const ids=new Set(inside.map(p=>p.id)); state.plants=state.plants.filter(p=>!ids.has(p.id)); }); select(null); };
