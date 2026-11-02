@@ -1,0 +1,15 @@
+{
+  "name": "Mon Terrain 3D",
+  "short_name": "Mon Terrain",
+  "description": "Aménagement 3D, plantations, entretien et récoltes du terrain",
+  "lang": "fr-CA",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#e9ece4",
+  "theme_color": "#2d6a45",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

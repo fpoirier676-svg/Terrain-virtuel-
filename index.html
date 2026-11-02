@@ -1,0 +1,1748 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mon Terrain 3D</title>
+<meta name="theme-color" content="#2d6a45">
+<meta name="description" content="Aménagement 3D, plantations, entretien et récoltes du terrain">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: one-screen workbench — panneau d'outils à gauche, scène 3D au centre, fiche de l'élément sélectionné à droite. */
+:root{
+  --bg:#e9ece4; --panel:#f6f7f2; --ink:#1c2520; --muted:#5d685f; --line:#d3d9cc;
+  --accent:#2d6a45; --accent-soft:#dbe8dc; --pollen:#b97d14; --soil:#6e4c33; --warn:#b4471f;
+  --sky:#cfdde3; --ground:#9fb07f;
+  --k-semis:#2f7aa0; --k-plantation:#2d6a45; --k-entretien:#7d6a2c; --k-taille:#8a4b7c; --k-recolte:#c0611c; --k-perso:#4a5560;
+  --display:'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --body:'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --mono:'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141a16; --panel:#1b221d; --ink:#e6ebe3; --muted:#9aa69c; --line:#2f3a32;
+    --accent:#6fbf8a; --accent-soft:#24382a; --pollen:#e0a640; --soil:#a37a58; --warn:#e8805a;
+    --sky:#1f2a30; --ground:#56664a;
+    --k-semis:#62acd4; --k-plantation:#6fbf8a; --k-entretien:#c7b061; --k-taille:#c886b8; --k-recolte:#ec9a57; --k-perso:#9aa6b0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141a16; --panel:#1b221d; --ink:#e6ebe3; --muted:#9aa69c; --line:#2f3a32;
+  --accent:#6fbf8a; --accent-soft:#24382a; --pollen:#e0a640; --soil:#a37a58; --warn:#e8805a;
+  --sky:#1f2a30; --ground:#56664a;
+  --k-semis:#62acd4; --k-plantation:#6fbf8a; --k-entretien:#c7b061; --k-taille:#c886b8; --k-recolte:#ec9a57; --k-perso:#9aa6b0;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--body);overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;font-weight:700}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* Header */
+header{height:58px;display:flex;align-items:center;gap:18px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{display:flex;flex-direction:column;min-width:0}
+.brand h1{font-size:19px;letter-spacing:-.01em;line-height:1.1}
+.brand span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+.timebar{display:flex;align-items:center;gap:14px;flex:1;min-width:0}
+.tctl{display:flex;flex-direction:column;gap:2px;min-width:0}
+.tctl label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.tctl input[type=range]{width:105px;accent-color:var(--accent)}
+.when{font-family:var(--display);font-size:17px;font-weight:500;white-space:nowrap;min-width:150px}
+.when small{display:block;font-family:var(--body);font-size:12px;color:var(--muted);font-weight:400}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:6px 11px;font-size:13px}
+.seg button[aria-pressed=true]{background:var(--accent);color:#fff}
+.btn{white-space:nowrap;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 11px;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{color:var(--warn)}
+.btn.sm{padding:3px 8px;font-size:12px}
+.save{font-size:12px;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:6px}
+.save i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.save.ok i{background:var(--accent)} .save.warn i{background:var(--pollen)}
+
+/* Main grid */
+main{display:grid;grid-template-columns:370px minmax(0,1fr) 310px;height:calc(100% - 58px)}
+aside{background:var(--panel);overflow:auto;min-height:0}
+#left{border-right:1px solid var(--line);display:flex;flex-direction:column}
+#right{border-left:1px solid var(--line);padding:16px}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.media{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column}
+.media img,.media video{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:var(--line)}
+.media .mb{padding:6px 8px;display:flex;flex-direction:column;gap:4px;font-size:12px}
+.media input,.media select{border:1px solid var(--line);border-radius:6px;background:var(--panel);padding:3px 5px;font-size:12px;width:100%}
+.media .acts{display:flex;gap:4px;flex-wrap:wrap}
+.gallery>p{grid-column:1/-1}
+.strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.strip img,.strip video{width:88px;height:66px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:none}
+a.li{color:inherit;text-decoration:none}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:10px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:2}
+.tabs button{border:1px solid transparent;background:transparent;border-radius:7px;padding:6px 4px;font-size:13px;color:var(--muted)}
+.tabs button[aria-selected=true]{background:var(--accent-soft);color:var(--ink);border-color:var(--line);font-weight:600}
+.pane{padding:14px;display:none;flex-direction:column;gap:12px}
+.pane.on{display:flex}
+.pane h2{font-size:16px}
+.hint{font-size:12.5px;color:var(--muted);margin:0}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:12px;color:var(--muted)}
+.field input,.field select,.field textarea{border:1px solid var(--line);border-radius:7px;background:var(--bg);padding:6px 8px;width:100%}
+.row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.row>.field{flex:1;min-width:80px}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-size:12px;background:transparent}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+
+/* Species list */
+.splist{display:flex;flex-direction:column;gap:2px}
+.sp{display:grid;grid-template-columns:14px 1fr auto;gap:10px;align-items:center;padding:7px 8px;border-radius:8px;border:1px solid transparent;background:transparent;text-align:left;width:100%}
+.sp:hover{background:var(--bg)}
+.sp[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
+.sw{width:14px;height:14px;border-radius:4px}
+.sp b{font-weight:600;display:block}
+.sp em{font-size:11.5px;color:var(--muted)}
+.sp .dim{font-size:11.5px;color:var(--muted);text-align:right}
+
+/* Zone tools */
+.ztools{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ztool{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:8px;background:transparent;text-align:left;font-size:13px}
+.ztool[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}
+.list{display:flex;flex-direction:column}
+.li{display:flex;justify-content:space-between;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);font-size:13px;background:transparent;border-left:0;border-right:0;border-top:0;text-align:left;width:100%}
+.li:hover{color:var(--accent)}
+.li span:last-child{color:var(--muted)}
+
+/* Calendar */
+.month{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
+.month.now{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.mhead{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--panel);border:0;width:100%;text-align:left}
+.mhead b{font-family:var(--display);font-size:15px;font-weight:500;text-transform:capitalize}
+.mhead span{font-size:12px;color:var(--muted)}
+.tasks{display:flex;flex-direction:column}
+.task{display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:start;padding:6px 10px;border-top:1px solid var(--line);font-size:13px}
+.task.done .tt{text-decoration:line-through;color:var(--muted)}
+.task input{margin-top:3px;accent-color:var(--accent)}
+.kind{align-self:flex-start;flex:none;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;border-radius:4px;border:1px solid currentColor;white-space:nowrap}
+.k-semis{color:var(--k-semis)} .k-plantation{color:var(--k-plantation)} .k-entretien{color:var(--k-entretien)}
+.k-taille{color:var(--k-taille)} .k-recolte{color:var(--k-recolte)} .k-perso{color:var(--k-perso)} .k-info{color:var(--muted)}
+.tt small{display:block;color:var(--muted);font-size:11.5px}
+
+/* Projection */
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart .ct{font-size:12px;color:var(--muted);margin-bottom:4px}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:right;font-weight:500;color:var(--muted);padding:4px;border-bottom:1px solid var(--line)}
+.tbl td{text-align:right;padding:4px;border-bottom:1px solid var(--line);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl tr.cur td{background:var(--accent-soft)}
+.tbl tr{cursor:pointer}
+.alert{display:grid;grid-template-columns:4px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;background:transparent;border-left:0;border-right:0;border-top:0;text-align:left;width:100%}
+.alert::before{content:"";border-radius:2px;background:var(--pollen)}
+.alert.high::before{background:var(--warn)}
+.alert small{display:block;color:var(--muted)}
+
+/* Stage */
+#stage{position:relative;min-width:0;min-height:0;background:var(--sky)}
+#stage canvas{display:block;width:100%;height:100%;touch-action:none}
+.ov{position:absolute;display:flex;gap:6px;align-items:center}
+.ov.tl{top:12px;left:12px;flex-wrap:wrap;right:120px}
+.ov.tr{top:12px;right:12px;flex-direction:column;align-items:flex-end}
+.ov.bl{bottom:12px;left:12px;right:12px;justify-content:space-between;pointer-events:none}
+.ov.bl>*{pointer-events:auto}
+.pill{background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12.5px;backdrop-filter:blur(6px)}
+.pill.mode{border-color:var(--accent);color:var(--accent);font-weight:600}
+.compass{width:46px;height:46px;border-radius:50%;background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);display:grid;place-items:center}
+.compass div{font:600 11px var(--mono);color:var(--warn);transform-origin:center}
+.compass div::before{content:"▲";display:block;text-align:center;font-size:12px;line-height:1}
+.legend{display:flex;gap:12px;font-size:12px;flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:12px;height:12px;border-radius:50%;display:inline-block}
+#tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--panel);padding:5px 9px;border-radius:7px;font-size:12px;display:none;white-space:nowrap;z-index:5}
+#ctip{position:fixed;pointer-events:none;background:var(--ink);color:var(--panel);padding:5px 9px;border-radius:7px;font-size:12px;display:none;z-index:50;white-space:nowrap}
+
+/* Inspector */
+#right h2{font-size:18px;margin-bottom:2px}
+.latin{font-style:italic;color:var(--muted);font-size:13px;margin:0 0 10px}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;margin:10px 0}
+.facts dt{color:var(--muted)} .facts dd{margin:0}
+.stack{display:flex;flex-direction:column;gap:10px}
+.badge{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--ink);border:1px solid var(--line)}
+.badge.plan{background:transparent;border-style:dashed;border-color:var(--accent);color:var(--accent)}
+.badge.warn{background:transparent;border-color:var(--warn);color:var(--warn)}
+.bigstats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg)}
+.stat b{font:500 20px var(--mono);display:block;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+hr{border:0;border-top:1px solid var(--line);margin:4px 0;width:100%}
+.banner{background:var(--accent-soft);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px}
+
+/* Modal & toast */
+#modal{position:fixed;inset:0;background:rgba(10,15,12,.45);display:none;place-items:center;z-index:100;padding:16px}
+#modal.on{display:grid}
+#modal .box{background:var(--panel);border-radius:14px;padding:18px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:12px;border:1px solid var(--line)}
+#modal textarea{width:100%;height:180px;font:12px var(--mono);border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:8px}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:8px 14px;border-radius:9px;font-size:13px;display:none;z-index:120}
+
+@media (max-width: 1280px){ .tctl label{font-size:10px} #today{display:none} }
+@media (max-width: 1100px){
+  main{grid-template-columns:330px minmax(0,1fr)}
+  #right{grid-column:1 / -1;border-left:0;border-top:1px solid var(--line);max-height:none}
+  body{overflow:auto} main{height:auto;grid-template-rows:calc(100vh - 58px) auto}
+  #left{max-height:calc(100vh - 58px)}
+}
+@media (max-width: 760px){
+  header{height:auto;flex-wrap:wrap;padding:10px 16px;gap:10px}
+  .timebar{flex-wrap:wrap;order:3;flex-basis:100%}
+  main{display:flex;flex-direction:column;height:auto}
+  #stage{height:60vh;order:-1}
+  #left{max-height:none}
+  .tctl input[type=range]{width:120px}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none!important} }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><h1>Mon Terrain</h1><span id="tName">—</span></div>
+  <div class="timebar">
+    <div class="when" id="when">—<small>—</small></div>
+    <div class="tctl"><label for="yr">Année</label><input id="yr" type="range" min="0" max="20" step="1"></div>
+    <div class="tctl"><label for="mo">Mois</label><input id="mo" type="range" min="1" max="12" step="1"></div>
+    <div class="tctl"><label for="hr">Heure (soleil)</label><input id="hr" type="range" min="5" max="21" step="0.5"></div>
+    <button class="btn" id="play" title="Faire défiler les mois pour voir la croissance">▶ Animer</button>
+    <button class="btn" id="today">Aujourd'hui</button>
+  </div>
+  <div class="seg" role="group" aria-label="Vue"><button id="v3d" aria-pressed="true">3D</button><button id="vplan" aria-pressed="false">Plan</button></div>
+  <button class="btn" id="undo" title="Annuler (Ctrl+Z)">↶ Annuler</button>
+  <div class="save" id="save"><i></i><span>Chargement…</span></div>
+</header>
+
+<main>
+  <aside id="left">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="veg" aria-selected="true">Végétaux</button>
+      <button role="tab" data-tab="zones" aria-selected="false">Zones</button>
+      <button role="tab" data-tab="cal" aria-selected="false">Calendrier</button>
+      <button role="tab" data-tab="proj" aria-selected="false">Projections</button>
+      <button role="tab" data-tab="rec" aria-selected="false">Récoltes</button>
+      <button role="tab" data-tab="jour" aria-selected="false">Photos & 3D</button>
+      <button role="tab" data-tab="site" aria-selected="false">Mon site</button>
+      <button role="tab" data-tab="ter" aria-selected="false">Terrain</button>
+    </div>
+
+    <section class="pane" id="p-jour">
+      <h2>Photos, vidéos et modèles 3D</h2>
+      <p class="hint">Documente ton terrain au fil des saisons. Associe chaque photo à une plante ou une zone pour suivre son évolution. Sur téléphone, « Prendre une photo » ouvre directement l'appareil.</p>
+      <div class="row">
+        <label class="btn primary" for="camIn">📷 Prendre une photo</label><input id="camIn" type="file" accept="image/*" capture="environment" hidden>
+        <label class="btn" for="vidIn">🎥 Filmer</label><input id="vidIn" type="file" accept="video/*" capture="environment" hidden>
+        <label class="btn" for="mediaIn">Choisir des fichiers…</label><input id="mediaIn" type="file" accept="image/*,video/*" multiple hidden>
+      </div>
+      <div class="field"><label for="mRef">Associer les prochains ajouts à</label><select id="mRef"></select></div>
+      <p class="hint" id="mediaWhere"></p>
+      <div class="chips" id="mFilter"></div>
+      <div class="gallery" id="gallery"></div>
+      <hr>
+      <h3 style="font-size:15px">Modèles 3D à partir de tes photos</h3>
+      <p class="hint">Pour modéliser une partie du terrain (maison, rocaille, arbre existant) : fais le tour du sujet en photo ou en vidéo avec une application de photogrammétrie comme Polycam, Luma AI, KIRI Engine ou RealityScan, exporte en <b>.glb</b>, puis importe le fichier ici. Il est placé au centre du terrain ; ajuste sa taille réelle et sa position dans la fiche.</p>
+      <div class="row"><label class="btn" for="glbIn">Importer un modèle .glb / .gltf</label><input id="glbIn" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" hidden></div>
+      <div class="list" id="modelList"></div>
+    </section>
+
+    <section class="pane" id="p-site">
+      <h2>Mon site : 70, rue Gauthier, Chicoutimi</h2>
+      <div class="bigstats" id="siteStats"></div>
+      <div class="chart" id="chClimate"></div>
+      <table class="tbl" id="climTbl"></table>
+      <p class="hint" id="climSrc"></p>
+      <div class="banner" id="siteGdd"></div>
+      <div class="banner" id="siteGeo" style="background:transparent"></div>
+      <h3 style="font-size:14px">Ma propriété</h3>
+      <div class="field"><label for="sAddr">Adresse</label><input id="sAddr"></div>
+      <div class="row">
+        <div class="field"><label for="sLot">Numéro de lot (cadastre)</label><input id="sLot" placeholder="7 chiffres, sur ton compte de taxes"></div>
+        <div class="field"><label for="sArea">Superficie officielle (m²)</label><input id="sArea" type="number" min="0" step="1"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="sLat">Latitude</label><input id="sLat" type="number" step="0.0001"></div>
+        <div class="field"><label for="sLon">Longitude</label><input id="sLon" type="number" step="0.0001"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="sSoil">Type de sol</label><select id="sSoil"><option value="">Inconnu</option><option>Sableux</option><option>Loameux</option><option>Argileux</option><option>Limoneux</option><option>Graveleux / remblai</option><option>Organique</option></select></div>
+        <div class="field"><label for="sPh">pH du sol</label><input id="sPh" type="number" step="0.1" min="3" max="10" placeholder="6,5"></div>
+      </div>
+      <div class="field"><label for="sNote">Microclimat et observations (vents dominants, zones d'ombre, accumulation de neige, drainage)</label><textarea id="sNote" rows="3"></textarea></div>
+      <h3 style="font-size:14px">Cartes, cadastre et météo</h3>
+      <div class="list" id="siteLinks"></div>
+    </section>
+
+    <section class="pane on" id="p-veg">
+      <h2>Bibliothèque de végétaux</h2>
+      <p class="hint">Choisis une plante, puis clique sur le terrain pour la planter. Elle reste active pour en planter plusieurs ; Échap pour arrêter.</p>
+      <div class="field"><label for="q">Rechercher</label><input id="q" placeholder="tomate, érable, bleuet…"></div>
+      <div class="chips" id="catChips"></div>
+      <div class="splist" id="splist"></div>
+    </section>
+
+    <section class="pane" id="p-zones">
+      <h2>Zones et structures</h2>
+      <p class="hint">Choisis un type puis glisse sur le terrain pour dessiner un rectangle. Ajuste ensuite la taille et l'angle dans la fiche à droite.</p>
+      <div class="ztools" id="ztools"></div>
+      <h3 style="font-size:14px">Zones du terrain</h3>
+      <div class="list" id="zlist"></div>
+    </section>
+
+    <section class="pane" id="p-cal">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h2>Calendrier <span class="num" id="calY"></span></h2>
+        <div class="row" style="gap:4px"><button class="btn sm" id="calPrev" aria-label="Année précédente">‹</button><button class="btn sm" id="calNext" aria-label="Année suivante">›</button></div>
+      </div>
+      <p class="hint">Tâches générées à partir de tes plantations (semis, plantation, entretien, taille, récolte) et tes tâches perso. Clique sur un mois pour voir ton terrain à ce moment.</p>
+      <div class="chips" id="kindChips"></div>
+      <details>
+        <summary style="cursor:pointer;font-size:13px">+ Ajouter une tâche perso</summary>
+        <form id="taskForm" class="row" style="margin-top:8px">
+          <div class="field" style="flex:2"><label for="tTitle">Tâche</label><input id="tTitle" required placeholder="Analyser le sol du potager"></div>
+          <div class="field"><label for="tDate">Date</label><input id="tDate" type="date" required></div>
+          <button class="btn primary" type="submit">Ajouter</button>
+        </form>
+      </details>
+      <div class="stack" id="months"></div>
+    </section>
+
+    <section class="pane" id="p-proj">
+      <h2>Projections</h2>
+      <p class="hint">Estimations à partir de la croissance moyenne et des rendements typiques en climat québécois. Clique sur une année pour voir le terrain à ce moment.</p>
+      <div class="chart" id="chYield"></div>
+      <div class="chart" id="chCover"></div>
+      <table class="tbl" id="projTbl"></table>
+      <p class="hint">* Total : inclut les annuelles seulement pour les années où elles sont planifiées au plan. Utilise « Copier les annuelles » plus bas pour prolonger ton potager.</p>
+      <h3 style="font-size:14px">Points à surveiller</h3>
+      <div id="alerts"></div>
+      <h3 style="font-size:14px">Plantations planifiées</h3>
+      <div class="list" id="planned"></div>
+      <div class="banner">
+        <b>Préparer la saison suivante</b>
+        <p class="hint" style="margin:4px 0 8px">Copie toutes les plantes annuelles d'une année vers la suivante, aux mêmes emplacements. Les alertes de rotation t'indiqueront ce qu'il faut déplacer.</p>
+        <button class="btn" id="carry">Copier les annuelles de <span class="num" id="carryY"></span> vers <span class="num" id="carryY2"></span></button>
+      </div>
+    </section>
+
+    <section class="pane" id="p-rec">
+      <h2>Récoltes</h2>
+      <form id="recForm" class="stack">
+        <div class="field"><label for="rSp">Culture</label><select id="rSp"></select></div>
+        <div class="row">
+          <div class="field"><label for="rDate">Date</label><input id="rDate" type="date" required></div>
+          <div class="field"><label for="rQty">Quantité</label><input id="rQty" type="number" min="0" step="0.1" required></div>
+          <div class="field"><label for="rUnit">Unité</label><select id="rUnit"><option>kg</option><option>unités</option><option>L</option><option>bottes</option></select></div>
+        </div>
+        <div class="field"><label for="rNote">Note</label><input id="rNote" placeholder="Variété, qualité…"></div>
+        <button class="btn primary" type="submit">Noter la récolte</button>
+      </form>
+      <div id="recSum"></div>
+      <div class="list" id="recList"></div>
+    </section>
+
+    <section class="pane" id="p-ter">
+      <h2>Terrain</h2>
+      <div class="field"><label for="fName">Nom</label><input id="fName"></div>
+      <div class="row">
+        <div class="field"><label for="fW">Largeur est-ouest (m)</label><input id="fW" type="number" min="5" max="400" step="0.5"></div>
+        <div class="field"><label for="fD">Profondeur nord-sud (m)</label><input id="fD" type="number" min="5" max="400" step="0.5"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="fLat">Latitude</label><input id="fLat" type="number" step="0.1" min="-70" max="70"></div>
+        <div class="field"><label for="fNorth">Rotation du nord (°)</label><input id="fNorth" type="number" step="5" min="-180" max="180"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="fZone">Zone de rusticité</label><select id="fZone"></select></div>
+        <div class="field"><label for="fSnap">Aimantation (m)</label><select id="fSnap"><option value="0">aucune</option><option value="0.1">0,1</option><option value="0.25">0,25</option><option value="0.5">0,5</option><option value="1">1</option></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label for="fFrost1">Dernier gel printanier</label><input id="fFrost1" type="text" placeholder="05-20"></div>
+        <div class="field"><label for="fFrost2">Premier gel automnal</label><input id="fFrost2" type="text" placeholder="09-25"></div>
+      </div>
+      <hr>
+      <h3 style="font-size:14px">Photo ou plan de fond</h3>
+      <p class="hint">Importe une vue aérienne ou un plan de ton terrain, recadré aux limites de la propriété. Elle sera étirée sur toute la surface (largeur × profondeur ci-dessus).</p>
+      <input id="fPhoto" type="file" accept="image/*">
+      <div class="row">
+        <div class="field"><label for="fOp">Opacité de la photo</label><input id="fOp" type="range" min="0" max="1" step="0.05"></div>
+        <button class="btn sm danger" id="rmPhoto">Retirer</button>
+      </div>
+      <hr>
+      <h3 style="font-size:14px">Sauvegarde</h3>
+      <p class="hint" id="saveHint"></p>
+      <div class="row">
+        <button class="btn" id="exp">Exporter (.json)</button>
+        <button class="btn" id="copyJson">Copier les données</button>
+        <label class="btn" for="imp">Importer…</label><input id="imp" type="file" accept=".json,application/json" hidden>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="loadReal">Recharger le plan de mon terrain (certificat 2019)</button>
+        <button class="btn" id="blank">Nouveau terrain vierge</button>
+        <button class="btn" id="example">Recharger l'exemple</button>
+      </div>
+    </section>
+  </aside>
+
+  <section id="stage">
+    <div class="ov tl">
+      <span class="pill mode" id="modePill">Sélection</span>
+      <button class="pill" id="selMode" style="cursor:pointer">Sélectionner (Échap)</button>
+    </div>
+    <div class="ov tr">
+      <div class="compass" title="Nord"><div id="needle">N</div></div>
+      <label class="pill"><input type="checkbox" id="optGrid" checked> Grille</label>
+      <label class="pill"><input type="checkbox" id="optShadow" checked> Ombres</label>
+      <label class="pill"><input type="checkbox" id="optRings"> Envergure adulte</label>
+    </div>
+    <div class="ov bl">
+      <div class="pill legend">
+        <span><i style="background:var(--accent)"></i>En place</span>
+        <span><i style="border:1.5px dashed var(--accent)"></i>Planifié (fantôme)</span>
+        <span id="sunInfo" class="num"></span>
+      </div>
+    </div>
+    <div id="tip"></div>
+  </section>
+
+  <aside id="right"></aside>
+</main>
+
+<div id="modal" role="dialog" aria-modal="true"><div class="box" id="mbox"></div></div>
+<div id="toast"></div>
+<div id="ctip"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+'use strict';
+/* =========================================================
+   Données de référence
+   ========================================================= */
+const MOIS = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+const MOISL = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const KINDS = {semis:'Semis', plantation:'Plantation', entretien:'Entretien', taille:'Taille', recolte:'Récolte', perso:'Perso'};
+const CAT = {leg:'Légumes', aro:'Aromatiques', pf:'Petits fruits', fru:'Fruitiers', arb:'Arbres', arbu:'Arbustes', viv:'Vivaces', haie:'Haies'};
+const ZONES_RUST = ['2a','2b','3a','3b','4a','4b','5a','5b','6a','6b','7a'];
+
+const SPECIES = [];
+function S(id,n,lat,cat,fam,life,shape,h,w,yrs,o){
+  SPECIES.push(Object.assign({id,n,lat,cat,fam,life,shape,h,w,yrs,sun:'Plein soleil',zone:4,col:'#4f8a3c',care:[],sp:w,first:1,yld:0,decid:life==='ligneux'},o||{}));
+}
+// Légumes
+S('tomate','Tomate','Solanum lycopersicum','leg','Solanacées','annuelle','touffe',1.5,.6,1,{col:'#3f7a3a',si:[3,4],pl:[6],rc:[8,9],yld:4,sp:.6,fl:['#e9c93a',[7]],care:[[[6,7,8],'entretien','Tuteurer, pincer les gourmands, arroser au pied']]});
+S('poivron','Poivron','Capsicum annuum','leg','Solanacées','annuelle','touffe',.7,.45,1,{col:'#3c7535',si:[3],pl:[6],rc:[8,9],yld:1.5,sp:.45,care:[[[7],'entretien','Pailler et arroser régulièrement']]});
+S('pdt','Pomme de terre','Solanum tuberosum','leg','Solanacées','annuelle','touffe',.6,.4,1,{col:'#4d7f3a',pl:[5],rc:[8,9],yld:1.2,sp:.35,care:[[[6,7],'entretien','Butter les plants']]});
+S('laitue','Laitue','Lactuca sativa','leg','Astéracées','annuelle','touffe',.25,.3,1,{col:'#86b648',se:[4,5,8],rc:[6,7,9],yld:.4,sp:.3});
+S('carotte','Carotte','Daucus carota','leg','Apiacées','annuelle','touffe',.3,.1,1,{col:'#5e9a3e',se:[5,6],rc:[8,9,10],yld:.15,sp:.08,care:[[[6],'entretien','Éclaircir les rangs']]});
+S('betterave','Betterave','Beta vulgaris','leg','Chénopodiacées','annuelle','touffe',.35,.15,1,{col:'#6f3b4a',se:[5,6],rc:[8,9],yld:.2,sp:.12});
+S('epinard','Épinard','Spinacia oleracea','leg','Chénopodiacées','annuelle','touffe',.25,.2,1,{col:'#2f6b33',se:[4,8],rc:[5,6,9],yld:.15,sp:.15});
+S('haricot','Haricot nain','Phaseolus vulgaris','leg','Légumineuses','annuelle','touffe',.5,.25,1,{col:'#4c8a36',se:[6],rc:[8,9],yld:.15,sp:.2});
+S('pois','Pois','Pisum sativum','leg','Légumineuses','annuelle','colonne',1,.15,1,{col:'#5a9a45',se:[4,5],rc:[7],yld:.15,sp:.08,care:[[[5],'entretien','Installer un treillis']]});
+S('courgette','Courgette','Cucurbita pepo','leg','Cucurbitacées','annuelle','touffe',.7,1,1,{col:'#3d7136',si:[5],pl:[6],rc:[7,8,9],yld:5,sp:1,fl:['#f0b429',[7]]});
+S('concombre','Concombre','Cucumis sativus','leg','Cucurbitacées','annuelle','colonne',1.5,.4,1,{col:'#44803a',si:[5],pl:[6],rc:[7,8],yld:3,sp:.4,care:[[[6],'entretien','Palisser sur treillis']]});
+S('courge','Courge d\'hiver','Cucurbita maxima','leg','Cucurbitacées','annuelle','touffe',.5,2,1,{col:'#3f6e33',si:[5],pl:[6],rc:[9,10],yld:6,sp:1.5});
+S('ail','Ail d\'automne','Allium sativum','leg','Alliacées','annuelle','colonne',.6,.12,1,{col:'#6c9a6a',pl:[10],rc:[7],rcNext:true,yld:.06,sp:.2,care:[[[11],'entretien','Pailler pour l\'hiver']],careNext:[[[6],'entretien','Couper les fleurs d\'ail (scapes)']]});
+S('oignon','Oignon','Allium cepa','leg','Alliacées','annuelle','colonne',.4,.1,1,{col:'#6a9b67',si:[3],pl:[5],rc:[8,9],yld:.15,sp:.1});
+S('kale','Chou kale','Brassica oleracea','leg','Brassicacées','annuelle','touffe',.8,.5,1,{col:'#3e5f4a',si:[4],pl:[5],rc:[7,8,9,10],yld:1,sp:.45,care:[[[6,7],'entretien','Filet contre la piéride du chou']]});
+S('brocoli','Brocoli','Brassica oleracea var. italica','leg','Brassicacées','annuelle','touffe',.7,.5,1,{col:'#466b52',si:[4],pl:[5],rc:[7,8],yld:.5,sp:.45});
+S('radis','Radis','Raphanus sativus','leg','Brassicacées','annuelle','touffe',.15,.06,1,{col:'#7ab04c',se:[4,5,8],rc:[5,6,9],yld:.03,sp:.05});
+S('mais','Maïs sucré','Zea mays','leg','Poacées','annuelle','colonne',2,.3,1,{col:'#6a9a3a',se:[6],rc:[8,9],yld:.4,sp:.3});
+// Aromatiques
+S('basilic','Basilic','Ocimum basilicum','aro','Lamiacées','annuelle','touffe',.4,.3,1,{col:'#3f8a3a',si:[4],pl:[6],rc:[7,8,9],yld:.2,sp:.25,care:[[[7],'entretien','Pincer les fleurs']]});
+S('persil','Persil','Petroselinum crispum','aro','Apiacées','annuelle','touffe',.3,.25,1,{col:'#2f7a33',si:[3],pl:[5],rc:[6,7,8,9,10],yld:.2,sp:.2});
+S('ciboulette','Ciboulette','Allium schoenoprasum','aro','Alliacées','vivace','touffe',.3,.3,2,{col:'#4f8f4f',zone:3,rc:[5,6,7,8,9],yld:.2,first:1,fl:['#b98ad8',[6]]});
+S('thym','Thym','Thymus vulgaris','aro','Lamiacées','vivace','touffe',.3,.4,2,{col:'#6f8a5a',zone:5,rc:[6,7,8,9],yld:.1,first:1,care:[[[7],'taille','Taille légère après la floraison']]});
+S('menthe','Menthe','Mentha spicata','aro','Lamiacées','vivace','touffe',.5,.8,2,{col:'#4a9a4a',zone:3,rc:[6,7,8,9],yld:.3,first:1,care:[[[5],'entretien','Contenir les drageons (en pot enterré)']]});
+S('origan','Origan','Origanum vulgare','aro','Lamiacées','vivace','touffe',.4,.45,2,{col:'#5c8a4c',zone:4,rc:[7,8],yld:.1,first:1});
+S('lavande','Lavande','Lavandula angustifolia','aro','Lamiacées','vivace','touffe',.5,.6,3,{col:'#7c9a86',zone:5,fl:['#8b6fc4',[7,8]],care:[[[5],'taille','Rabattre au tiers'],[[8],'taille','Retirer les épis fanés']]});
+// Petits fruits
+S('fraisier','Fraisier','Fragaria × ananassa','pf','Rosacées','vivace','touffe',.2,.35,1,{col:'#3d7a3d',zone:3,rc:[6,7],yld:.4,first:1,fl:['#f4f1e6',[5,6]],care:[[[8],'entretien','Couper les stolons'],[[11],'entretien','Pailler pour l\'hiver']]});
+S('framboisier','Framboisier','Rubus idaeus','pf','Rosacées','ligneux','touffe',1.6,.6,3,{col:'#4a7d3c',zone:3,decid:true,aut:'#b5862b',rc:[7,8],yld:1.2,first:2,sp:.5,care:[[[4],'taille','Couper les cannes ayant fructifié et les plus faibles']]});
+S('bleuetier','Bleuetier en corymbe','Vaccinium corymbosum','pf','Éricacées','ligneux','touffe',1.5,1.2,6,{col:'#4f7a4c',zone:4,aut:'#b8361f',rc:[7,8],yld:3,first:3,fl:['#f3ece2',[5]],care:[[[3],'taille','Retirer le vieux bois'],[[5],'entretien','Acidifier le sol (soufre, aiguilles de pin)']]});
+S('cassis','Cassis','Ribes nigrum','pf','Grossulariacées','ligneux','touffe',1.5,1.5,4,{col:'#4a7a3e',zone:2,aut:'#b8902e',rc:[7],yld:3,first:2,care:[[[3],'taille','Renouveler un tiers des branches']]});
+S('groseillier','Groseillier','Ribes rubrum','pf','Grossulariacées','ligneux','touffe',1.2,1.2,4,{col:'#4f7f40',zone:2,aut:'#c49a33',rc:[7],yld:3,first:2,care:[[[3],'taille','Taille d\'aération']]});
+S('camerisier','Camerisier (haskap)','Lonicera caerulea','pf','Caprifoliacées','ligneux','touffe',1.8,1.5,5,{col:'#5d8257',zone:2,aut:'#b39a3a',rc:[6],yld:3,first:3,fl:['#f2eed0',[4]],care:[[[4],'taille','Taille légère d\'entretien']],note:'Planter au moins deux variétés compatibles pour la pollinisation.'});
+S('sureau','Sureau du Canada','Sambucus canadensis','pf','Adoxacées','ligneux','touffe',3,3,4,{col:'#4c7c3c',zone:3,aut:'#b49a3c',rc:[8,9],yld:3,first:2,fl:['#f5f1de',[6,7]],care:[[[4],'taille','Retirer les tiges de plus de 3 ans']]});
+S('rhubarbe','Rhubarbe','Rheum rhabarbarum','pf','Polygonacées','vivace','touffe',1,1.2,3,{col:'#4c7a35',zone:2,rc:[5,6],yld:3,first:2,care:[[[6],'entretien','Couper les hampes florales']]});
+S('asperge','Asperge','Asparagus officinalis','leg','Asparagacées','vivace','colonne',1.5,.5,3,{col:'#6f9e5a',zone:3,rc:[5,6],yld:.4,first:3,sp:.45,care:[[[10],'entretien','Couper le feuillage jauni']]});
+// Fruitiers
+S('pommier','Pommier semi-nain','Malus domestica','fru','Rosacées','ligneux','rond',4,4,8,{col:'#4c7f3a',zone:3,aut:'#c49b2f',rc:[9,10],yld:40,first:4,fl:['#f6d6de',[5]],care:[[[3],'taille','Taille de formation (fin d\'hiver)'],[[6],'entretien','Éclaircir les fruits'],[[11],'entretien','Protège-tronc contre les rongeurs']],note:'Prévoir un second pommier ou pommetier pour la pollinisation.'});
+S('poirier','Poirier','Pyrus communis','fru','Rosacées','ligneux','ovale',5,3.5,9,{col:'#477a3a',zone:4,aut:'#b8541f',rc:[9],yld:30,first:5,fl:['#f8f5ec',[5]],care:[[[3],'taille','Taille de formation'],[[11],'entretien','Protège-tronc']]});
+S('prunier','Prunier','Prunus domestica','fru','Rosacées','ligneux','rond',4.5,4,7,{col:'#4b7639',zone:4,aut:'#b0481e',rc:[8],yld:20,first:4,fl:['#f8f5ec',[5]],care:[[[6],'taille','Taille légère après la récolte']]});
+S('cerisier','Cerisier griotte','Prunus cerasus','fru','Rosacées','ligneux','rond',3.5,3,6,{col:'#4f7b3c',zone:3,aut:'#c2421c',rc:[7],yld:15,first:3,fl:['#f8f0f2',[5]],care:[[[7],'entretien','Filet anti-oiseaux'],[[3],'taille','Taille d\'aération']]});
+S('amelanchier','Amélanchier','Amelanchier canadensis','fru','Rosacées','ligneux','ovale',5,4,8,{col:'#58803f',zone:3,aut:'#d26a1f',rc:[7],yld:5,first:3,fl:['#f8f6ee',[5]]});
+// Arbres
+S('erable','Érable à sucre','Acer saccharum','arb','Sapindacées','ligneux','rond',20,14,40,{col:'#3f7a34',zone:3,aut:'#d9481e',care:[[[2],'taille','Élagage des branches mortes (dormance)']]});
+S('chene','Chêne rouge','Quercus rubra','arb','Fagacées','ligneux','rond',22,15,45,{col:'#3e6e31',zone:4,aut:'#9b2d20'});
+S('bouleau','Bouleau à papier','Betula papyrifera','arb','Bétulacées','ligneux','ovale',18,9,25,{col:'#5e8f3e',zone:2,aut:'#e2bf35'});
+S('epinette','Épinette blanche','Picea glauca','arb','Pinacées','ligneux','cone',18,6,35,{col:'#2e5845',zone:2,decid:false});
+S('arbre-ex-f','Arbre feuillu existant (LiDAR)','Espèce à identifier','arb','—','ligneux','rond',15,8,1,{col:'#4a7a3c',zone:2,aut:'#c98a2a',note:'Arbre relevé par le LiDAR du Québec (avril 2023, avant la feuillaison). Hauteur mesurée ; envergure estimée. Indique son espèce dans les notes.'});
+S('arbre-ex-c','Conifère existant (LiDAR)','Espèce à identifier','arb','—','ligneux','cone',15,5,1,{col:'#2f5a43',zone:2,decid:false,note:'Conifère relevé par le LiDAR du Québec (avril 2023). Hauteur mesurée ; envergure estimée.'});
+S('haie-ex','Haie existante (à identifier)','Espèce à préciser','haie','—','ligneux','touffe',1.5,1.2,5,{col:'#3f6a3c',zone:2,decid:true,aut:'#9a8a3a',sp:1.2,care:[[[6],'taille','Tailler la haie']],note:'Haie relevée sur le certificat de localisation de 2019. Indique son espèce dans les notes.'});
+S('thuya','Thuya (haie)','Thuja occidentalis','haie','Cupressacées','ligneux','colonne',3,.8,6,{col:'#355f3a',zone:3,decid:false,sp:.6,care:[[[6],'taille','Tailler la haie'],[[11],'entretien','Protection hivernale si exposée au sel']]});
+// Arbustes
+S('hydrangee','Hydrangée paniculée','Hydrangea paniculata','arbu','Hydrangéacées','ligneux','touffe',2,2,4,{col:'#4b7d40',zone:3,aut:'#a8833a',fl:['#f1ede0',[8,9]],care:[[[4],'taille','Rabattre au tiers']]});
+S('lilas','Lilas commun','Syringa vulgaris','arbu','Oléacées','ligneux','ovale',4,3,8,{col:'#4a7a3f',zone:2,aut:'#8e8a3a',fl:['#b58ad1',[5]],care:[[[6],'taille','Retirer les fleurs fanées']]});
+S('rosier','Rosier rustique','Rosa (série Explorer)','arbu','Rosacées','ligneux','touffe',1.5,1.2,3,{col:'#3e6d3b',zone:3,aut:'#b04a26',fl:['#d4456b',[6,7,8,9]],care:[[[4],'taille','Retirer le bois mort']]});
+S('cornouiller','Cornouiller stolonifère','Cornus sericea','arbu','Cornacées','ligneux','touffe',2,2.2,4,{col:'#4e7c45',zone:2,aut:'#a2302d',care:[[[4],'taille','Retirer les vieilles tiges']]});
+// Vivaces ornementales
+S('hosta','Hosta','Hosta spp.','viv','Asparagacées','vivace','touffe',.6,.9,3,{col:'#5b8a6a',zone:3,sun:'Mi-ombre à ombre',fl:['#c9b8e0',[7]],care:[[[5],'entretien','Surveiller les limaces']]});
+S('astilbe','Astilbe','Astilbe × arendsii','viv','Saxifragacées','vivace','touffe',.6,.5,2,{col:'#3f6e45',zone:4,sun:'Mi-ombre',fl:['#e47c9b',[7]]});
+S('echinacee','Échinacée pourpre','Echinacea purpurea','viv','Astéracées','vivace','touffe',.9,.5,2,{col:'#4b7a3a',zone:3,fl:['#c4569a',[7,8,9]],care:[[[10],'entretien','Laisser les capitules pour les oiseaux']]});
+S('rudbeckia','Rudbeckia','Rudbeckia fulgida','viv','Astéracées','vivace','touffe',.8,.6,2,{col:'#4a7535',zone:3,fl:['#e2a72a',[7,8,9]]});
+S('hemerocalle','Hémérocalle','Hemerocallis spp.','viv','Asphodélacées','vivace','touffe',.7,.7,2,{col:'#5b8a3f',zone:3,fl:['#e5762a',[7]],care:[[[9],'entretien','Diviser tous les 4 ans']]});
+S('pivoine','Pivoine','Paeonia lactiflora','viv','Paeoniacées','vivace','touffe',.9,.9,4,{col:'#3f6f3a',zone:3,fl:['#e58aa8',[6]],care:[[[5],'entretien','Installer un tuteur-cercle'],[[10],'entretien','Couper le feuillage au sol']]});
+S('calamagrostis','Calamagrostis \'Karl Foerster\'','Calamagrostis × acutiflora','viv','Poacées','vivace','colonne',1.6,.6,2,{col:'#8a9a5a',zone:4,care:[[[4],'taille','Rabattre à 10 cm']]});
+
+const SP = Object.fromEntries(SPECIES.map(s=>[s.id,s]));
+
+const ZT = {
+  platebande:{n:'Plate-bande', col:'#6b4a33', h:.12},
+  potager:{n:'Bac potager', col:'#5a3d29', h:.35, border:'#a37b52'},
+  pelouse:{n:'Pelouse', col:'#7ea65c', h:.02},
+  allee:{n:'Allée / gravier', col:'#bcb5a6', h:.04},
+  terrasse:{n:'Terrasse / patio', col:'#a8845e', h:.25},
+  batiment:{n:'Bâtiment', col:'#ddd6c8', h:3, roof:'#5b524a'},
+  bassin:{n:'Bassin', col:'#4f8fb0', h:.03},
+  compost:{n:'Compost', col:'#4a3a2a', h:.8},
+  serre:{n:'Serre', col:'#d6e8dc', h:2.3, roof:'#eef5f0', glass:true},
+  reseau:{n:'Ligne aérienne / réseau', col:'#d9822b', h:.02},
+};
+
+/* =========================================================
+   État
+   ========================================================= */
+const TODAY = new Date();
+const Y0 = TODAY.getFullYear(), M0 = TODAY.getMonth()+1;
+const ISO = d=>d.toISOString().slice(0,10);
+const TODAY_ISO = ISO(TODAY);
+const uid = ()=>Math.random().toString(36).slice(2,9);
+const esc = s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmt=(v,d=1)=>Number(v).toLocaleString('fr-CA',{maximumFractionDigits:d,minimumFractionDigits:0});
+const pd = s=>{const [y,m,d]=(s||TODAY_ISO).split('-').map(Number);return {y,m,d:d||1};};
+const iso=(y,m,d=15)=>`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+let state, photo=null;
+const view = {y: M0>=9 ? Y0+1 : Y0, m:7, h:14, mode:'select', modeArg:null, sel:null, cam:'3d', calY:null, kinds:new Set(Object.keys(KINDS)), cat:null, q:''};
+
+function blankState(){
+  return {v:1, updatedAt:0, terrain:{name:'70, rue Gauthier, Chicoutimi', w:30, d:20, lat:48.464, north:0, zone:'3b', snap:0.25, frost1:'05-28', frost2:'09-17', photoOp:.8},
+    site:{addr:'70, rue Gauthier, Chicoutimi (Saguenay), QC', lat:48.464, lon:-70.994, lot:'', area:'', soil:'', ph:'', note:''},
+    zones:[], plants:[], tasks:[], done:{}, harvests:[], media:[], models:[]};
+}
+const REAL={"w": 90.07, "d": 74.24, "lots": [{"name": "Lot 5 511 832", "area": 2341.3, "pts": [[3.0, 66.236], [14.277, 9.303], [48.429, 3.0], [49.091, 63.926]]}, {"name": "Lot 5 511 834", "area": 895.9, "pts": [[49.091, 63.926], [48.792, 36.497], [87.07, 36.094], [77.705, 62.491]]}], "zones": [{"type": "allee", "name": "Rue Gauthier (emprise publique)", "x": 45.0, "z": 68.33, "w": 90, "d": 8, "rot": -2.87, "h": 0.02, "color": "#5d6264", "note": "Hors propriété"}, {"type": "batiment", "name": "Maison (n° 70, 1½ étage, stuc)", "x": 33.843, "z": 35.943, "w": 12.23, "d": 8.56, "rot": 0, "h": 4.6, "note": "Certificat de localisation 2019 : 12,24 × 8,56 m"}, {"type": "terrasse", "name": "Dalle de béton (nord de la maison)", "x": 33.546, "z": 31.075, "w": 11.6, "d": 1.2, "rot": 0, "h": 0.12, "color": "#b9b4aa"}, {"type": "terrasse", "name": "Patio en tuiles", "x": 35.621, "z": 28.662, "w": 4.87, "d": 3.45, "rot": 0, "h": 0.08, "color": "#b7a48c"}, {"type": "terrasse", "name": "Tuiles (accès ouest)", "x": 30.752, "z": 29.487, "w": 2.43, "d": 1.84, "rot": 0, "h": 0.08, "color": "#b7a48c"}, {"type": "terrasse", "name": "Dalle du spa", "x": 34.965, "z": 25.613, "w": 2.43, "d": 2.58, "rot": 0, "h": 0.12, "color": "#b9b4aa"}, {"type": "bassin", "name": "Spa", "x": 34.965, "z": 25.613, "w": 1.95, "d": 1.95, "rot": 0, "h": 0.95, "color": "#3f87a6"}, {"type": "terrasse", "name": "Terrasse (bois)", "x": 30.18, "z": 12.658, "w": 4.8, "d": 5.7, "rot": 0, "h": 0.3}, {"type": "batiment", "name": "Abri d'été", "x": 30.54, "z": 11.515, "w": 3.2, "d": 3.2, "rot": 0, "h": 2.3, "color": "#e7e1d3"}, {"type": "potager", "name": "Jardin (potager clôturé)", "x": 37.272, "z": 11.494, "w": 8.25, "d": 4.0, "rot": -3.8, "h": 0.15}, {"type": "batiment", "name": "Remise est (vinyle)", "x": 46.332, "z": 15.855, "w": 3.08, "d": 5.07, "rot": 0, "h": 2.6, "note": "Permis 1993"}, {"type": "serre", "name": "Serre est", "x": 46.438, "z": 19.919, "w": 3.12, "d": 2.94, "rot": 0, "h": 2.3, "note": "À 0,53 m de la limite est"}, {"type": "batiment", "name": "Remise nord-ouest (vinyle)", "x": 17.077, "z": 14.881, "w": 3.72, "d": 6.18, "rot": 12.0, "h": 2.6}, {"type": "serre", "name": "Serre nord-ouest", "x": 18.263, "z": 10.859, "w": 2.27, "d": 2.2, "rot": -4.4, "h": 2.3, "note": "En partie dans la zone de contrainte « talus »"}, {"type": "terrasse", "name": "Rampe de bois", "x": 19.744, "z": 17.061, "w": 2.45, "d": 1.8, "rot": 12, "h": 0.25}, {"type": "terrasse", "name": "Tuiles (zone est)", "x": 42.818, "z": 17.844, "w": 2.75, "d": 8.8, "rot": 0, "h": 0.08, "color": "#b7a48c"}, {"type": "terrasse", "name": "Tuiles (côté est maison)", "x": 45.358, "z": 34.483, "w": 2.75, "d": 7.7, "rot": 0, "h": 0.08, "color": "#b7a48c"}, {"type": "allee", "name": "Entrée en asphalte", "x": 43.876, "z": 51.248, "w": 5.85, "d": 25.4, "rot": 0, "h": 0.04, "color": "#6b6f71"}, {"type": "allee", "name": "Bande de pavé (empiète de 3,3 m² sur le lot 5 511 834)", "x": 47.899, "z": 50.825, "w": 1.7, "d": 26.0, "rot": 0, "h": 0.05, "color": "#a59a8b"}, {"type": "allee", "name": "Pavé (devant la maison)", "x": 31.07, "z": 40.77, "w": 6.0, "d": 1.2, "rot": 0, "h": 0.05, "color": "#a59a8b"}, {"type": "allee", "name": "Pavé (vers l’entrée)", "x": 38.097, "z": 43.141, "w": 5.2, "d": 1.2, "rot": 0, "h": 0.05, "color": "#a59a8b"}, {"type": "allee", "name": "Allée en tuiles", "x": 30.604, "z": 22.068, "w": 12.98, "d": 1.0, "rot": 90.0, "h": 0.05, "color": "#b7a48c"}, {"type": "allee", "name": "Allée en tuiles", "x": 41.548, "z": 26.481, "w": 8.47, "d": 0.85, "rot": 90.0, "h": 0.05, "color": "#b7a48c"}, {"type": "allee", "name": "Allée en tuiles", "x": 22.285, "z": 15.685, "w": 7.37, "d": 1.2, "rot": 39.2, "h": 0.05, "color": "#b7a48c"}, {"type": "allee", "name": "Allée en tuiles", "x": 33.133, "z": 20.924, "w": 16.8, "d": 1.6, "rot": 18.0, "h": 0.05, "color": "#b7a48c"}, {"type": "allee", "name": "Allée en tuiles", "x": 21.067, "z": 20.289, "w": 6.61, "d": 1.0, "rot": -31.9, "h": 0.05, "color": "#b7a48c"}, {"type": "allee", "name": "Allée en tuiles", "x": 34.351, "z": 15.685, "w": 4.83, "d": 1.0, "rot": -61.2, "h": 0.05, "color": "#b7a48c"}, {"type": "reseau", "name": "Ligne aérienne (services publics)", "x": 9.16, "z": 48.147, "w": 38.44, "d": 0.3, "rot": 69.2, "h": 0.03, "note": "Servitude d’utilité publique 1951. Éviter les grands arbres dessous."}, {"type": "reseau", "name": "Ligne aérienne (limite est)", "x": 48.978, "z": 38.018, "w": 51.86, "d": 0.3, "rot": 89.7, "h": 0.03}, {"type": "reseau", "name": "Branchement électrique de la maison", "x": 42.956, "z": 21.538, "w": 19.33, "d": 0.25, "rot": -73.0, "h": 0.03}, {"type": "reseau", "name": "Ligne aérienne (rue)", "x": 28.635, "z": 65.008, "w": 64.63, "d": 0.3, "rot": -2.6, "h": 0.03}], "plants": [{"sp": "haie-ex", "x": 20.506, "z": 63.484, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 21.877, "z": 63.434, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 23.248, "z": 63.385, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 24.618, "z": 63.336, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 25.989, "z": 63.286, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 27.36, "z": 63.237, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 28.73, "z": 63.187, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 30.101, "z": 63.138, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 31.472, "z": 63.089, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 32.842, "z": 63.039, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 34.213, "z": 62.99, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 35.584, "z": 62.94, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}, {"sp": "haie-ex", "x": 36.954, "z": 62.891, "date": "2015-06-01", "note": "Haie existante (certificat 2019)"}], "markers": [{"name": "Repère d’arpentage (coin nord-ouest)", "pt": [14.135, 9.314]}, {"name": "Repère d’arpentage (près du coin sud-ouest)", "pt": [2.915, 67.336]}, {"name": "Réservoir de propane", "pt": [27.302, 33.763]}]};
+const LIDAR={"meta":{"tile":"22_2685369F07","date":"2023-04-02","crs":"NAD83(SCRS) / MTM fuseau 7","rot":-3.56,"house":[268354.99,5369656.61],"corners":{"Lot 5 511 832":[[268326.09,5369624.46],[268333.8,5369681.98],[268367.5,5369690.39],[268371.94,5369629.63]],"Lot 5 511 834":[[268371.94,5369629.63],[268369.94,5369656.99],[268408.12,5369659.77],[268400.41,5369632.84]]}},"elev":{"nx":91,"nz":75,"step":1,"base":8.45,"data":[149,171,180,208,262,299,338,338,331,337,349,351,346,337,355,385,381,388,401,402,393,364,332,304,308,327,340,358,381,396,421,451,468,465,459,433,418,389,341,266,225,191,144,94,52,12,-45,-84,-100,-107,-109,-108,-107,-107,-106,-105,-104,-104,-104,-104,-99,-97,-96,-93,-95,-100,-103,-106,-106,-109,-109,-108,-107,-108,-97,-74,-66,-66,-67,-69,-68,-67,-67,-57,-8,16,24,36,43,46,25,81,77,75,118,176,203,247,278,279,272,269,259,260,280,333,351,329,328,336,333,324,280,236,219,240,256,269,278,287,298,311,319,328,332,325,285,246,219,200,183,165,136,92,44,-4,-31,-70,-95,-104,-107,-107,-106,-106,-105,-105,-103,-103,-102,-100,-100,-98,-97,-92,-86,-90,-97,-103,-105,-106,-105,-106,-107,-108,-103,-86,-66,-59,-62,-67,-68,-68,-68,-64,-41,1,9,11,17,21,18,9,26,20,29,69,131,153,169,204,217,208,203,205,207,225,272,270,248,239,241,240,224,163,138,153,176,192,205,202,202,212,206,198,190,204,195,177,138,110,99,118,107,67,25,-22,-59,-77,-92,-101,-106,-105,-106,-106,-105,-103,-100,-99,-98,-97,-95,-95,-95,-94,-90,-85,-87,-94,-101,-103,-104,-104,-105,-107,-106,-91,-71,-61,-58,-58,-60,-61,-61,-58,-50,-36,-5,6,7,8,8,4,-1,-2,-3,7,51,118,138,153,173,183,180,164,150,157,170,161,150,151,150,137,109,94,76,91,121,144,151,146,131,124,127,116,100,71,50,44,54,27,4,-3,24,17,-24,-50,-69,-88,-97,-98,-100,-100,-102,-106,-106,-102,-97,-95,-94,-93,-93,-92,-93,-93,-92,-91,-90,-91,-96,-100,-103,-104,-105,-106,-107,-98,-80,-66,-59,-57,-54,-54,-55,-53,-45,-42,-42,-22,1,2,2,3,0,-3,-15,-15,-4,27,82,101,110,120,122,135,109,78,81,102,84,76,89,86,58,31,25,29,53,84,97,96,77,59,38,23,17,10,-6,-19,-27,-31,-42,-53,-56,-53,-65,-81,-88,-93,-99,-97,-94,-97,-99,-103,-105,-102,-96,-92,-93,-93,-92,-92,-92,-92,-93,-94,-93,-92,-92,-97,-101,-104,-106,-107,-106,-101,-82,-68,-61,-57,-54,-51,-51,-52,-51,-43,-42,-48,-33,-4,3,3,2,-2,-3,-17,-12,-1,18,48,59,68,65,62,71,52,31,26,32,27,23,30,19,-4,-26,-22,-12,-5,12,17,13,4,-4,-25,-38,-42,-51,-57,-62,-64,-70,-71,-77,-81,-84,-88,-94,-96,-97,-95,-91,-88,-92,-97,-101,-102,-98,-93,-91,-92,-93,-93,-92,-90,-93,-95,-94,-93,-92,-93,-97,-102,-105,-108,-109,-107,-94,-70,-63,-58,-53,-50,-50,-51,-52,-50,-44,-45,-52,-38,-13,3,5,3,-2,-3,-7,-7,4,17,27,31,33,34,33,34,24,8,8,15,10,-12,-33,-43,-50,-56,-53,-47,-46,-39,-30,-31,-32,-28,-39,-49,-56,-68,-74,-76,-77,-80,-80,-84,-87,-92,-93,-96,-94,-89,-87,-85,-85,-86,-88,-95,-97,-95,-93,-92,-92,-92,-94,-90,-87,-90,-92,-92,-91,-92,-94,-98,-102,-105,-107,-109,-108,-92,-68,-62,-54,-46,-45,-47,-50,-50,-49,-49,-50,-54,-40,-22,-1,4,2,-1,-2,5,0,6,15,23,24,22,23,21,14,4,-10,-7,3,-2,-29,-47,-55,-63,-65,-68,-71,-71,-64,-54,-45,-31,-28,-41,-58,-63,-69,-77,-82,-84,-88,-86,-89,-87,-87,-86,-84,-86,-85,-85,-83,-80,-80,-84,-88,-90,-91,-91,-92,-93,-94,-95,-88,-83,-81,-86,-89,-92,-93,-95,-99,-103,-105,-106,-109,-108,-97,-78,-66,-54,-45,-43,-44,-47,-48,-51,-51,-51,-53,-47,-34,-9,-1,-3,-2,-1,5,4,7,13,21,22,16,10,8,1,-10,-24,-25,-19,-25,-42,-53,-56,-60,-63,-70,-76,-77,-72,-58,-50,-40,-37,-50,-68,-72,-72,-75,-79,-79,-85,-85,-83,-81,-77,-75,-73,-77,-77,-81,-80,-77,-78,-80,-83,-87,-89,-91,-93,-95,-97,-97,-96,-93,-90,-90,-91,-95,-96,-98,-101,-102,-103,-104,-107,-105,-96,-82,-68,-57,-50,-46,-46,-47,-48,-51,-52,-53,-53,-52,-45,-31,-21,-16,-11,-7,7,9,7,7,14,18,5,-5,-6,-10,-18,-28,-33,-35,-40,-49,-55,-55,-55,-55,-63,-70,-71,-67,-61,-60,-57,-57,-66,-73,-71,-65,-67,-71,-72,-78,-80,-74,-71,-69,-64,-60,-63,-63,-70,-75,-75,-77,-79,-81,-85,-87,-91,-93,-94,-94,-94,-96,-95,-95,-95,-96,-95,-95,-97,-100,-101,-101,-100,-103,-100,-90,-81,-69,-58,-53,-49,-48,-48,-49,-50,-53,-56,-57,-56,-54,-52,-46,-41,-35,-26,11,14,10,6,7,9,-7,-13,-14,-15,-18,-23,-29,-32,-38,-46,-50,-51,-42,-37,-47,-54,-55,-54,-56,-59,-61,-62,-64,-63,-62,-55,-59,-65,-65,-66,-63,-59,-60,-61,-55,-52,-52,-55,-65,-72,-72,-76,-80,-79,-80,-83,-88,-89,-88,-88,-89,-90,-91,-92,-93,-95,-94,-95,-98,-98,-99,-100,-101,-101,-93,-82,-75,-60,-50,-50,-48,-49,-48,-48,-49,-51,-55,-57,-58,-58,-59,-58,-58,-56,-52,14,16,14,12,14,13,-1,-9,-13,-15,-18,-21,-27,-27,-29,-33,-37,-38,-33,-29,-37,-43,-46,-47,-50,-55,-59,-60,-57,-48,-49,-45,-50,-56,-59,-58,-53,-54,-56,-56,-52,-49,-47,-55,-66,-73,-76,-79,-78,-71,-73,-79,-84,-86,-85,-85,-86,-87,-89,-89,-91,-92,-93,-95,-98,-99,-100,-102,-103,-97,-85,-75,-59,-38,-32,-32,-36,-41,-43,-43,-48,-51,-53,-56,-59,-60,-60,-60,-62,-63,-65,17,18,15,15,17,14,11,8,1,-3,-3,-8,-21,-26,-25,-25,-24,-24,-25,-27,-31,-38,-43,-46,-48,-54,-57,-55,-48,-42,-40,-40,-46,-55,-59,-58,-56,-55,-56,-58,-54,-44,-44,-55,-65,-69,-73,-75,-72,-66,-67,-74,-80,-83,-82,-84,-85,-87,-88,-89,-90,-91,-93,-95,-98,-100,-100,-102,-102,-93,-74,-60,-45,-31,-27,-26,-27,-30,-30,-29,-36,-44,-50,-54,-57,-59,-58,-59,-64,-65,-66,17,18,18,17,17,10,12,12,10,9,13,11,-8,-16,-17,-14,-15,-18,-20,-21,-28,-37,-42,-45,-47,-50,-51,-49,-37,-37,-40,-40,-47,-58,-62,-61,-60,-57,-57,-60,-58,-43,-45,-59,-67,-66,-70,-74,-72,-65,-64,-68,-73,-77,-79,-80,-84,-87,-88,-89,-91,-93,-95,-97,-99,-101,-100,-102,-100,-86,-66,-49,-36,-27,-26,-26,-26,-28,-29,-25,-25,-25,-31,-39,-43,-48,-55,-57,-64,-64,-64,15,16,17,18,18,15,14,12,10,9,12,13,3,-4,-10,-11,-10,-11,-12,-14,-27,-37,-42,-45,-49,-53,-53,-50,-40,-37,-40,-40,-42,-52,-64,-68,-66,-61,-66,-69,-69,-61,-61,-69,-72,-72,-75,-77,-76,-70,-64,-64,-66,-68,-70,-73,-77,-83,-86,-90,-93,-94,-97,-99,-101,-101,-101,-101,-95,-77,-57,-39,-26,-20,-20,-21,-22,-26,-27,-25,-23,-19,-18,-28,-36,-40,-47,-52,-59,-60,-62,13,13,15,16,16,14,14,14,13,11,11,14,13,4,-5,-6,-7,-11,-14,-17,-28,-38,-43,-48,-52,-57,-58,-58,-51,-41,-41,-41,-42,-47,-60,-69,-71,-72,-74,-77,-77,-74,-74,-75,-76,-77,-76,-77,-77,-73,-65,-62,-63,-63,-65,-67,-70,-75,-80,-88,-92,-93,-95,-99,-100,-99,-99,-97,-90,-70,-50,-33,-21,-16,-17,-20,-25,-28,-24,-22,-21,-19,-18,-25,-34,-38,-43,-46,-49,-54,-60,10,11,13,13,13,12,14,14,15,16,17,16,17,3,-7,-5,-8,-14,-16,-21,-30,-39,-43,-48,-54,-58,-61,-62,-61,-57,-54,-49,-49,-52,-62,-72,-75,-76,-79,-81,-80,-76,-75,-73,-75,-76,-77,-78,-78,-75,-66,-62,-62,-61,-63,-64,-67,-71,-77,-86,-91,-93,-95,-99,-98,-97,-96,-92,-80,-63,-44,-29,-19,-16,-17,-21,-29,-30,-23,-21,-19,-18,-20,-25,-31,-35,-39,-41,-44,-51,-56,8,10,11,12,13,14,14,13,17,22,22,19,13,-2,-14,-16,-20,-20,-16,-20,-29,-39,-47,-52,-55,-58,-61,-64,-66,-66,-65,-57,-53,-57,-67,-74,-76,-76,-79,-80,-78,-74,-75,-74,-73,-72,-74,-78,-78,-76,-67,-64,-64,-63,-63,-64,-67,-70,-77,-86,-91,-93,-96,-98,-96,-93,-91,-85,-72,-54,-37,-26,-19,-15,-16,-20,-30,-30,-23,-21,-19,-18,-20,-25,-29,-33,-37,-39,-43,-51,-56,10,10,12,14,15,15,16,15,17,24,27,23,7,-9,-16,-20,-22,-21,-17,-23,-32,-43,-53,-55,-57,-60,-63,-65,-66,-67,-69,-67,-64,-65,-70,-73,-75,-76,-78,-80,-80,-76,-75,-73,-72,-71,-69,-75,-79,-76,-69,-66,-66,-65,-65,-66,-67,-71,-77,-86,-91,-93,-95,-96,-95,-91,-86,-78,-63,-46,-32,-24,-20,-17,-15,-16,-27,-29,-22,-18,-16,-15,-19,-24,-29,-33,-37,-41,-46,-51,-56,15,14,15,16,16,16,16,16,18,28,37,28,7,-6,-10,-16,-18,-22,-24,-29,-39,-48,-55,-56,-59,-61,-63,-64,-65,-66,-69,-70,-71,-71,-72,-74,-76,-77,-79,-80,-79,-76,-73,-72,-72,-67,-64,-70,-79,-76,-71,-69,-67,-67,-67,-67,-69,-72,-79,-86,-91,-93,-94,-94,-94,-90,-84,-73,-56,-41,-29,-23,-20,-19,-16,-15,-21,-26,-18,-13,-11,-11,-15,-22,-28,-33,-39,-44,-48,-53,-58,25,23,21,18,17,17,16,17,19,27,41,20,9,2,-2,-9,-14,-19,-23,-31,-41,-49,-54,-55,-57,-60,-62,-62,-64,-65,-68,-70,-70,-70,-71,-72,-73,-75,-77,-77,-76,-73,-71,-72,-71,-67,-66,-71,-77,-78,-75,-73,-72,-71,-71,-71,-72,-75,-81,-88,-93,-95,-95,-95,-93,-88,-80,-69,-53,-38,-27,-19,-16,-16,-16,-15,-15,-17,-16,-15,-14,-14,-16,-23,-29,-33,-39,-45,-50,-55,-61,27,29,34,28,20,20,18,18,21,19,19,1,2,4,1,-9,-16,-18,-21,-26,-37,-50,-56,-54,-54,-57,-60,-61,-62,-63,-64,-66,-67,-67,-69,-69,-70,-70,-71,-72,-71,-68,-68,-69,-68,-68,-69,-71,-71,-75,-78,-79,-80,-78,-78,-78,-78,-80,-84,-88,-91,-93,-94,-93,-90,-83,-75,-63,-48,-32,-20,-18,-15,-14,-14,-14,-13,-12,-14,-16,-16,-16,-18,-25,-30,-34,-38,-43,-50,-57,-63,30,34,45,36,23,20,18,19,20,16,4,-6,-8,-5,-3,-11,-21,-24,-27,-30,-42,-51,-52,-50,-50,-54,-57,-57,-58,-59,-62,-65,-65,-66,-68,-69,-70,-69,-68,-68,-67,-65,-65,-64,-66,-68,-71,-72,-69,-69,-78,-80,-81,-81,-82,-83,-83,-85,-86,-87,-89,-90,-91,-91,-85,-76,-66,-53,-41,-25,-11,-11,-11,-11,-11,-12,-12,-11,-11,-13,-15,-16,-19,-25,-30,-33,-37,-42,-48,-56,-64,32,36,43,30,18,16,16,18,20,12,1,-8,-12,-6,-2,-10,-22,-31,-37,-40,-45,-49,-49,-47,-48,-51,-54,-53,-54,-57,-61,-64,-65,-65,-68,-69,-69,-69,-69,-68,-65,-63,-64,-65,-67,-70,-73,-72,-69,-69,-77,-79,-81,-82,-83,-84,-84,-85,-85,-86,-87,-87,-88,-88,-82,-70,-45,-28,-22,-15,-8,-8,-9,-9,-9,-10,-11,-11,-11,-11,-12,-15,-20,-26,-30,-33,-35,-40,-48,-56,-64,33,35,32,19,15,12,11,15,18,13,3,-7,-11,-2,0,-9,-24,-35,-41,-44,-47,-47,-46,-46,-49,-49,-49,-50,-53,-55,-59,-61,-63,-63,-64,-62,-63,-67,-67,-66,-64,-61,-61,-66,-68,-71,-73,-73,-72,-74,-77,-78,-80,-81,-83,-83,-83,-83,-83,-84,-85,-85,-87,-86,-80,-68,-47,-16,-10,-9,-7,-8,-9,-9,-10,-14,-14,-13,-13,-13,-13,-15,-20,-26,-30,-33,-36,-40,-51,-58,-63,31,27,19,15,15,12,9,11,16,16,10,-4,-12,-7,-7,-14,-27,-36,-43,-45,-47,-47,-44,-46,-49,-45,-40,-41,-48,-53,-56,-58,-57,-58,-57,-53,-57,-60,-59,-56,-53,-56,-55,-58,-63,-67,-70,-71,-72,-76,-78,-78,-79,-80,-80,-82,-82,-83,-83,-84,-85,-85,-86,-85,-80,-68,-52,-22,-9,-8,-7,-8,-13,-20,-29,-34,-23,-13,-13,-13,-13,-16,-21,-25,-29,-33,-37,-43,-52,-58,-64,28,21,14,13,13,11,7,7,9,12,12,-3,-12,-15,-21,-27,-29,-36,-45,-47,-49,-48,-44,-43,-42,-34,-31,-31,-35,-40,-45,-47,-46,-49,-46,-34,-43,-48,-46,-41,-36,-44,-45,-46,-52,-59,-63,-65,-69,-75,-77,-75,-77,-77,-79,-82,-83,-85,-85,-85,-86,-86,-86,-83,-76,-62,-33,-10,-8,-9,-11,-16,-38,-49,-50,-45,-33,-15,-12,-12,-13,-18,-23,-26,-29,-33,-38,-45,-52,-57,-62,26,19,16,15,14,12,7,6,6,7,3,-21,-28,-31,-34,-36,-36,-42,-47,-49,-51,-49,-37,-28,-21,-15,-16,-12,-11,-15,-19,-19,-19,-25,-23,-17,-21,-23,-20,-18,-17,-24,-29,-35,-35,-44,-54,-53,-64,-76,-79,-77,-75,-74,-78,-82,-86,-88,-88,-89,-89,-88,-86,-81,-70,-48,-22,-10,-9,-11,-14,-31,-53,-56,-51,-45,-40,-20,-11,-11,-14,-19,-24,-27,-30,-34,-39,-47,-54,-61,-63,24,16,15,15,15,13,8,7,4,2,-11,-38,-41,-39,-39,-41,-39,-46,-49,-51,-53,-50,-33,-14,-1,1,-3,3,5,2,-5,-4,-2,-7,-11,-10,-9,-7,-2,-1,-3,-6,-13,-23,-20,-33,-45,-48,-63,-79,-83,-82,-77,-75,-81,-86,-89,-91,-91,-92,-91,-90,-87,-80,-70,-55,-44,-31,-18,-16,-26,-46,-56,-56,-50,-45,-41,-22,-11,-11,-16,-22,-25,-28,-32,-37,-39,-47,-56,-65,-70,21,13,13,13,14,14,7,3,0,-3,-17,-41,-43,-43,-45,-47,-45,-50,-51,-52,-54,-49,-31,-8,4,4,2,6,6,2,-4,-5,-5,-6,-7,-6,-6,-4,1,6,6,1,-3,-3,2,-10,-32,-51,-70,-81,-85,-85,-83,-85,-89,-91,-92,-92,-93,-93,-93,-93,-89,-83,-75,-67,-61,-55,-46,-42,-48,-55,-57,-55,-51,-46,-37,-22,-11,-13,-20,-24,-27,-30,-35,-39,-40,-43,-55,-69,-74,18,13,13,13,13,9,2,-2,-5,-7,-16,-38,-44,-43,-44,-48,-48,-53,-54,-53,-54,-49,-32,-9,4,5,3,6,5,0,-4,-5,-5,-5,-5,-4,-5,-5,-2,5,7,1,0,3,4,1,-14,-47,-73,-84,-89,-90,-90,-93,-92,-92,-93,-94,-94,-94,-94,-94,-91,-87,-81,-75,-72,-65,-58,-56,-55,-56,-58,-57,-55,-51,-39,-26,-20,-22,-25,-28,-31,-33,-38,-43,-42,-40,-50,-71,-78,12,10,10,11,9,3,-2,-4,-5,-9,-18,-37,-42,-43,-45,-48,-51,-54,-55,-56,-54,-51,-37,-11,4,5,3,3,2,1,-1,-3,-2,-2,-3,-3,-2,-2,0,2,2,0,1,3,4,4,-3,-37,-72,-86,-89,-88,-90,-92,-93,-93,-92,-94,-95,-95,-94,-94,-93,-91,-86,-82,-78,-73,-62,-57,-56,-57,-58,-58,-57,-57,-51,-46,-47,-44,-39,-36,-38,-41,-45,-47,-42,-45,-56,-72,-80,10,5,5,6,3,-3,-5,-3,-2,-13,-30,-38,-39,-43,-45,-50,-55,-56,-55,-56,-53,-49,-36,-13,3,4,2,4,3,1,0,-2,-1,0,-1,-2,0,1,3,6,5,0,0,1,3,5,0,-28,-67,-84,-88,-87,-89,-90,-92,-94,-93,-94,-94,-95,-94,-94,-96,-96,-93,-87,-82,-79,-70,-59,-57,-59,-60,-59,-59,-59,-61,-60,-60,-59,-57,-51,-50,-55,-58,-52,-50,-56,-62,-70,-78,8,0,2,2,-1,-7,-7,-7,-6,-14,-28,-36,-40,-43,-46,-51,-55,-56,-55,-57,-57,-50,-35,-14,1,2,2,5,6,1,0,-2,-1,0,-1,-2,0,4,13,18,13,2,0,1,4,8,7,-18,-59,-81,-85,-85,-88,-88,-89,-92,-93,-95,-96,-96,-95,-94,-94,-96,-96,-92,-87,-84,-79,-65,-61,-62,-61,-59,-58,-59,-61,-60,-61,-62,-61,-62,-63,-65,-65,-64,-66,-68,-71,-74,-79,6,-2,-1,-1,-4,-9,-11,-12,-10,-13,-30,-44,-43,-44,-46,-52,-55,-55,-56,-57,-58,-53,-38,-17,-1,1,0,1,2,1,0,-2,-1,0,-1,-2,2,11,19,20,12,3,2,2,8,11,8,-13,-51,-77,-79,-80,-84,-84,-88,-91,-92,-96,-97,-97,-94,-90,-90,-92,-96,-95,-90,-88,-84,-69,-65,-64,-59,-58,-59,-57,-57,-59,-61,-62,-62,-63,-66,-69,-71,-71,-72,-80,-82,-81,-82,5,-4,-4,-2,-5,-10,-13,-11,-7,-6,-29,-46,-46,-47,-49,-55,-57,-56,-56,-57,-57,-49,-38,-16,-1,1,2,4,7,10,8,1,-1,0,-1,-2,7,19,20,16,6,3,3,4,15,16,9,-10,-42,-68,-73,-74,-74,-75,-88,-92,-93,-95,-96,-95,-91,-89,-89,-90,-94,-95,-89,-88,-83,-69,-65,-64,-59,-58,-58,-58,-59,-60,-61,-62,-62,-65,-70,-71,-71,-71,-74,-79,-83,-84,-83,-4,-8,-6,-5,-7,-13,-14,-13,-16,-20,-36,-47,-47,-50,-53,-56,-56,-56,-57,-58,-59,-54,-42,-15,0,2,5,11,15,16,14,3,-2,-1,0,2,12,19,16,10,5,4,3,4,11,10,10,0,-31,-56,-61,-58,-57,-60,-75,-87,-90,-89,-86,-85,-87,-88,-87,-84,-82,-84,-84,-84,-78,-68,-65,-63,-59,-58,-58,-59,-60,-61,-61,-62,-66,-80,-88,-80,-75,-76,-76,-79,-82,-83,-82,-14,-14,-13,-11,-13,-17,-16,-17,-26,-39,-49,-48,-49,-52,-55,-56,-56,-56,-57,-59,-61,-55,-42,-15,3,4,6,13,14,14,9,-1,-3,-3,3,7,11,16,16,12,9,6,4,4,11,16,14,9,-18,-38,-38,-37,-40,-40,-46,-62,-60,-52,-47,-52,-64,-75,-72,-68,-65,-67,-69,-70,-69,-71,-72,-70,-66,-60,-63,-69,-69,-67,-64,-70,-85,-104,-108,-101,-86,-77,-78,-80,-82,-82,-79,-18,-19,-18,-16,-17,-19,-20,-23,-32,-46,-53,-50,-52,-55,-56,-56,-56,-57,-58,-60,-62,-57,-39,-14,2,2,5,10,10,5,-2,-4,-3,-3,3,7,9,19,18,15,13,9,6,6,13,17,14,9,-13,-17,-8,-5,-12,-11,-12,-22,-27,-26,-34,-39,-41,-52,-61,-62,-63,-64,-63,-65,-68,-74,-75,-75,-73,-64,-68,-81,-85,-83,-84,-95,-104,-109,-110,-106,-91,-78,-79,-79,-80,-80,-78,-27,-28,-23,-18,-21,-23,-23,-26,-37,-52,-56,-52,-52,-54,-57,-57,-57,-58,-60,-61,-61,-54,-38,-19,-4,0,4,8,3,-3,-4,-4,-3,-3,4,7,10,25,25,17,13,7,5,5,8,8,7,1,-12,-13,-8,-6,-9,-12,-15,-22,-25,-27,-35,-39,-40,-48,-55,-61,-62,-63,-61,-65,-68,-74,-76,-75,-73,-65,-67,-81,-86,-86,-94,-100,-104,-107,-108,-106,-97,-88,-86,-81,-79,-80,-78,-36,-36,-28,-20,-21,-22,-22,-27,-41,-59,-59,-53,-54,-58,-60,-58,-57,-58,-60,-61,-61,-56,-40,-20,-5,1,5,5,-1,-4,-4,-4,-3,-2,4,8,12,22,28,21,15,7,5,5,5,3,3,-2,-10,-13,-16,-14,-13,-16,-20,-24,-27,-29,-36,-39,-42,-47,-52,-58,-61,-63,-61,-64,-68,-73,-75,-75,-74,-67,-68,-79,-85,-85,-93,-97,-100,-103,-104,-103,-97,-90,-82,-79,-78,-79,-78,-39,-35,-26,-21,-24,-25,-25,-31,-47,-60,-58,-54,-54,-58,-57,-57,-57,-58,-60,-61,-62,-59,-44,-20,-6,2,7,8,3,0,-1,-2,-2,-3,4,11,15,19,24,20,14,7,4,3,3,1,-1,-4,-11,-15,-16,-16,-15,-14,-18,-23,-26,-33,-38,-39,-43,-48,-52,-56,-58,-60,-60,-62,-65,-69,-72,-74,-75,-74,-74,-80,-85,-86,-90,-96,-98,-100,-101,-102,-99,-90,-81,-79,-78,-78,-78,-39,-35,-25,-23,-27,-28,-27,-34,-51,-59,-55,-53,-53,-56,-55,-55,-58,-59,-61,-62,-63,-61,-48,-26,-10,2,9,10,7,4,2,0,-2,-3,1,8,13,16,18,14,9,5,3,2,2,-1,-2,-4,-11,-13,-14,-15,-14,-14,-17,-22,-25,-30,-34,-38,-42,-45,-49,-52,-54,-55,-57,-58,-60,-63,-67,-70,-73,-77,-79,-82,-85,-87,-90,-94,-98,-99,-98,-99,-98,-88,-80,-78,-78,-78,-78,-38,-39,-27,-25,-28,-29,-27,-34,-50,-57,-55,-54,-55,-58,-57,-56,-56,-59,-62,-63,-64,-62,-48,-29,-9,2,6,4,3,1,-2,-2,-1,-1,-1,-1,2,4,7,6,5,3,1,1,-1,-4,-5,-4,-9,-11,-12,-12,-12,-13,-15,-18,-22,-27,-31,-34,-38,-40,-43,-47,-49,-51,-53,-54,-56,-59,-62,-66,-69,-73,-77,-81,-84,-87,-88,-91,-96,-98,-97,-96,-93,-85,-78,-77,-78,-77,-78,-40,-40,-27,-26,-29,-29,-29,-35,-48,-56,-56,-57,-59,-60,-58,-55,-54,-58,-63,-65,-66,-65,-51,-28,-9,-3,-1,-2,-3,-4,-6,-5,-3,-2,-2,-2,0,2,5,7,5,2,1,0,-2,-6,-7,-7,-9,-10,-11,-10,-11,-13,-15,-17,-21,-26,-28,-29,-33,-36,-39,-42,-44,-47,-50,-51,-53,-55,-59,-62,-65,-68,-73,-78,-82,-85,-86,-88,-93,-97,-96,-95,-89,-81,-77,-76,-77,-77,-79,-42,-37,-26,-27,-30,-31,-34,-38,-46,-55,-58,-61,-62,-62,-58,-57,-56,-59,-64,-68,-69,-68,-59,-39,-23,-18,-17,-16,-14,-15,-16,-15,-13,-11,-11,-10,-2,4,6,8,6,2,-1,-1,-3,-5,-7,-9,-10,-10,-12,-11,-11,-13,-16,-18,-23,-26,-28,-28,-29,-31,-35,-38,-42,-45,-47,-48,-50,-52,-56,-59,-62,-66,-71,-77,-83,-84,-86,-88,-94,-97,-96,-93,-86,-78,-76,-76,-77,-77,-79,-41,-35,-26,-28,-30,-31,-34,-44,-49,-55,-59,-61,-63,-62,-60,-60,-61,-64,-68,-71,-73,-71,-63,-55,-50,-47,-46,-44,-41,-41,-40,-38,-35,-34,-33,-31,-16,-7,-2,2,1,-1,-3,-3,-4,-6,-7,-9,-9,-10,-12,-11,-11,-13,-17,-22,-24,-25,-26,-26,-26,-28,-33,-37,-40,-43,-45,-46,-47,-50,-53,-57,-61,-65,-72,-76,-79,-82,-85,-87,-94,-95,-93,-90,-81,-76,-77,-77,-77,-78,-80,-42,-36,-28,-28,-29,-30,-35,-48,-55,-57,-60,-60,-61,-62,-61,-60,-63,-66,-71,-74,-74,-72,-68,-67,-67,-67,-67,-65,-62,-61,-60,-59,-59,-58,-58,-52,-36,-22,-15,-9,-3,-3,-3,-1,0,-6,-8,-9,-10,-11,-10,-10,-12,-14,-18,-24,-27,-24,-23,-24,-27,-28,-32,-33,-35,-40,-40,-41,-44,-48,-52,-56,-61,-65,-71,-73,-74,-77,-84,-87,-90,-89,-89,-85,-77,-76,-77,-78,-78,-78,-80,-43,-32,-27,-29,-30,-29,-35,-49,-60,-60,-60,-61,-62,-61,-59,-59,-63,-67,-72,-73,-74,-74,-73,-73,-73,-72,-72,-71,-69,-69,-69,-68,-69,-70,-69,-62,-50,-33,-22,-14,-6,-5,-6,-3,-2,-11,-12,-10,-11,-12,-12,-12,-14,-15,-18,-22,-24,-21,-20,-22,-25,-27,-29,-30,-31,-33,-33,-34,-38,-43,-49,-54,-59,-63,-68,-69,-69,-71,-80,-86,-87,-86,-87,-83,-77,-76,-77,-78,-79,-79,-80,-41,-31,-28,-30,-29,-25,-33,-50,-60,-61,-61,-63,-63,-63,-60,-61,-64,-68,-71,-71,-73,-74,-74,-74,-75,-74,-74,-73,-72,-72,-73,-73,-73,-73,-72,-67,-60,-48,-39,-24,-13,-10,-9,-7,-8,-14,-13,-12,-13,-14,-14,-14,-14,-15,-15,-12,-10,-15,-18,-19,-22,-24,-24,-25,-26,-27,-27,-27,-27,-33,-42,-47,-52,-56,-60,-63,-64,-70,-79,-85,-84,-85,-86,-81,-75,-76,-76,-77,-80,-79,-82,-40,-32,-29,-31,-27,-15,-29,-50,-61,-62,-64,-65,-63,-63,-64,-66,-68,-70,-71,-71,-72,-74,-74,-75,-76,-76,-76,-74,-74,-73,-74,-75,-75,-73,-72,-69,-68,-65,-58,-44,-24,-13,-10,-9,-13,-18,-17,-13,-15,-16,-15,-14,-14,-13,-9,-4,-5,-14,-18,-19,-21,-21,-20,-21,-22,-23,-23,-21,-17,-22,-33,-38,-43,-48,-55,-61,-67,-74,-81,-83,-81,-84,-85,-79,-75,-76,-77,-77,-79,-81,-85,-40,-31,-29,-31,-29,-22,-34,-51,-59,-62,-64,-65,-62,-62,-66,-70,-72,-72,-72,-71,-72,-73,-75,-76,-77,-77,-76,-75,-74,-74,-76,-76,-75,-73,-72,-71,-72,-73,-70,-60,-37,-17,-11,-12,-15,-19,-19,-15,-16,-18,-15,-13,-13,-13,-12,-11,-13,-15,-17,-16,-18,-20,-18,-18,-19,-19,-20,-21,-22,-25,-30,-34,-38,-44,-51,-60,-68,-75,-81,-82,-83,-85,-84,-78,-75,-77,-78,-78,-80,-82,-87,-37,-28,-29,-30,-28,-28,-43,-55,-57,-59,-62,-61,-61,-63,-68,-72,-73,-73,-72,-71,-72,-74,-75,-76,-77,-76,-76,-77,-75,-75,-76,-76,-75,-74,-72,-71,-73,-73,-73,-66,-40,-19,-15,-15,-17,-22,-22,-16,-17,-19,-16,-14,-12,-13,-14,-15,-16,-16,-16,-15,-16,-17,-16,-15,-15,-16,-19,-22,-24,-26,-28,-31,-36,-43,-52,-61,-69,-75,-79,-82,-86,-84,-81,-77,-76,-77,-78,-80,-82,-83,-87,-38,-27,-29,-29,-26,-33,-51,-58,-55,-55,-59,-60,-62,-66,-69,-72,-73,-74,-74,-73,-74,-75,-75,-76,-77,-76,-76,-76,-75,-75,-75,-75,-74,-74,-71,-70,-72,-72,-72,-67,-42,-19,-18,-17,-20,-23,-22,-17,-19,-20,-17,-14,-13,-13,-15,-17,-17,-17,-18,-19,-18,-16,-15,-12,-11,-13,-15,-20,-24,-26,-28,-31,-37,-46,-56,-65,-71,-74,-79,-86,-88,-84,-81,-76,-76,-78,-79,-80,-83,-85,-87,-35,-27,-29,-28,-25,-37,-54,-58,-55,-54,-57,-60,-65,-69,-72,-73,-75,-76,-78,-77,-76,-77,-76,-77,-77,-76,-76,-75,-75,-74,-75,-74,-73,-74,-72,-69,-71,-71,-71,-66,-44,-21,-21,-19,-21,-25,-24,-19,-21,-22,-19,-16,-14,-14,-16,-17,-17,-18,-19,-19,-18,-16,-14,-8,-5,-7,-12,-19,-26,-28,-30,-34,-42,-51,-60,-69,-75,-76,-84,-89,-87,-81,-77,-75,-77,-79,-80,-82,-83,-85,-87,-29,-30,-31,-30,-31,-41,-56,-59,-56,-56,-56,-60,-67,-72,-74,-73,-75,-78,-80,-79,-78,-78,-78,-78,-78,-76,-75,-75,-75,-75,-76,-75,-74,-73,-72,-71,-72,-69,-69,-63,-43,-23,-21,-22,-25,-28,-27,-21,-23,-24,-22,-18,-17,-17,-17,-17,-18,-19,-20,-20,-20,-17,-13,-10,-7,-9,-18,-25,-32,-33,-35,-40,-47,-54,-64,-71,-76,-77,-82,-88,-81,-74,-72,-75,-78,-80,-81,-82,-84,-84,-87,-30,-32,-32,-32,-34,-46,-59,-60,-57,-57,-58,-62,-68,-73,-73,-73,-73,-76,-77,-78,-79,-78,-78,-76,-75,-73,-73,-75,-76,-77,-77,-76,-74,-72,-71,-70,-70,-66,-64,-60,-44,-27,-24,-23,-27,-30,-29,-24,-25,-26,-25,-21,-20,-19,-18,-20,-21,-21,-20,-22,-23,-20,-17,-16,-17,-19,-24,-31,-36,-39,-41,-46,-52,-57,-66,-71,-74,-76,-77,-82,-81,-75,-73,-77,-79,-79,-81,-83,-85,-87,-91,-33,-34,-33,-33,-35,-49,-60,-58,-58,-58,-59,-64,-69,-72,-70,-68,-67,-72,-77,-80,-81,-79,-77,-74,-69,-67,-69,-72,-75,-77,-76,-73,-70,-69,-68,-68,-67,-63,-60,-60,-47,-29,-26,-27,-28,-32,-31,-26,-27,-29,-27,-25,-24,-22,-22,-24,-24,-24,-24,-23,-22,-22,-20,-22,-23,-24,-28,-33,-39,-43,-47,-52,-58,-64,-69,-70,-71,-74,-72,-73,-80,-80,-77,-78,-80,-81,-81,-83,-86,-88,-90,-33,-32,-32,-32,-38,-52,-59,-57,-57,-60,-61,-67,-71,-71,-68,-64,-64,-71,-77,-81,-80,-79,-76,-73,-68,-65,-65,-67,-69,-71,-70,-67,-66,-67,-66,-66,-66,-64,-63,-63,-51,-32,-29,-29,-30,-34,-33,-29,-30,-32,-32,-29,-27,-28,-28,-28,-28,-29,-28,-26,-26,-26,-26,-28,-29,-30,-34,-38,-43,-48,-53,-58,-63,-70,-73,-71,-70,-71,-66,-64,-68,-74,-78,-80,-81,-81,-82,-84,-87,-87,-89,-31,-30,-29,-29,-40,-55,-58,-56,-57,-59,-61,-67,-69,-69,-69,-69,-70,-73,-77,-79,-77,-74,-71,-70,-69,-66,-64,-62,-63,-64,-63,-61,-62,-63,-63,-63,-63,-65,-64,-63,-52,-35,-32,-32,-32,-36,-35,-31,-34,-38,-37,-35,-32,-31,-33,-33,-33,-32,-30,-30,-32,-33,-32,-32,-36,-38,-41,-45,-49,-52,-56,-61,-67,-73,-74,-73,-71,-71,-66,-60,-59,-64,-75,-81,-83,-83,-83,-85,-88,-91,-95,-29,-28,-27,-29,-42,-59,-58,-54,-57,-61,-63,-66,-68,-69,-72,-72,-72,-73,-75,-76,-73,-70,-68,-67,-66,-66,-63,-61,-60,-58,-57,-56,-57,-60,-59,-58,-58,-60,-61,-60,-51,-37,-35,-37,-37,-40,-38,-35,-38,-41,-41,-38,-36,-34,-33,-33,-32,-31,-30,-30,-33,-36,-38,-41,-44,-46,-48,-53,-58,-60,-62,-66,-70,-74,-75,-75,-74,-74,-71,-65,-57,-60,-75,-84,-85,-85,-86,-87,-89,-93,-97,-27,-25,-23,-30,-49,-61,-58,-56,-58,-62,-64,-65,-67,-68,-70,-70,-70,-71,-71,-72,-71,-69,-66,-65,-64,-65,-63,-61,-58,-56,-55,-54,-55,-56,-53,-54,-53,-53,-55,-55,-47,-37,-38,-40,-39,-42,-41,-36,-39,-44,-45,-44,-42,-37,-35,-34,-32,-30,-29,-30,-33,-37,-43,-50,-54,-56,-58,-64,-68,-71,-74,-76,-87,-94,-92,-89,-84,-80,-75,-72,-63,-64,-79,-86,-85,-86,-88,-89,-91,-95,-101,-25,-23,-19,-29,-51,-61,-59,-57,-60,-64,-65,-64,-64,-67,-67,-66,-67,-68,-68,-68,-67,-65,-63,-62,-63,-63,-62,-60,-57,-56,-54,-53,-52,-51,-47,-46,-48,-49,-49,-50,-45,-38,-38,-40,-40,-43,-42,-35,-39,-45,-49,-46,-44,-39,-35,-35,-34,-31,-29,-30,-32,-41,-56,-61,-63,-64,-66,-70,-77,-83,-83,-91,-111,-115,-116,-113,-94,-87,-84,-80,-73,-75,-86,-88,-86,-87,-88,-90,-91,-95,-104,-25,-21,-15,-25,-49,-60,-58,-56,-60,-64,-63,-62,-62,-65,-65,-65,-65,-67,-66,-65,-63,-61,-61,-60,-61,-61,-59,-58,-56,-54,-52,-53,-50,-49,-42,-39,-41,-44,-46,-47,-45,-40,-41,-42,-43,-45,-43,-36,-40,-49,-52,-50,-49,-48,-43,-40,-38,-35,-33,-35,-40,-51,-62,-64,-64,-64,-69,-75,-82,-87,-93,-105,-115,-118,-121,-114,-93,-87,-88,-85,-81,-84,-90,-88,-87,-87,-87,-90,-92,-98,-104,-26,-21,-15,-23,-45,-56,-57,-56,-60,-62,-60,-59,-62,-64,-64,-64,-64,-65,-63,-59,-56,-58,-59,-57,-58,-59,-57,-57,-57,-56,-57,-58,-60,-55,-47,-44,-40,-46,-51,-50,-46,-42,-43,-44,-45,-48,-43,-40,-44,-50,-54,-53,-52,-55,-57,-56,-51,-47,-48,-52,-55,-57,-59,-62,-63,-63,-69,-77,-80,-85,-101,-109,-111,-114,-110,-89,-82,-83,-85,-83,-83,-86,-85,-84,-84,-85,-86,-89,-93,-97,-101,-27,-20,-12,-20,-39,-50,-53,-55,-58,-57,-56,-57,-62,-62,-59,-59,-59,-59,-56,-58,-58,-59,-58,-57,-58,-61,-65,-68,-67,-70,-72,-74,-78,-78,-72,-71,-68,-72,-75,-67,-53,-45,-45,-46,-48,-50,-47,-48,-52,-53,-54,-54,-53,-58,-60,-59,-54,-51,-52,-56,-57,-57,-57,-59,-60,-61,-64,-68,-68,-68,-81,-92,-86,-81,-80,-75,-79,-80,-83,-83,-83,-84,-82,-80,-81,-82,-84,-87,-90,-93,-96,-26,-17,-7,-21,-39,-45,-45,-47,-52,-52,-54,-60,-66,-64,-64,-63,-61,-62,-65,-69,-71,-68,-66,-65,-66,-71,-77,-80,-85,-85,-85,-85,-89,-89,-87,-87,-86,-83,-82,-75,-57,-47,-46,-47,-49,-51,-49,-48,-51,-52,-53,-52,-53,-57,-59,-57,-52,-51,-52,-56,-57,-57,-57,-60,-61,-60,-61,-65,-66,-65,-68,-72,-70,-68,-70,-71,-75,-77,-79,-80,-80,-81,-80,-79,-79,-80,-81,-84,-88,-90,-92,-24,-12,-10,-31,-44,-47,-42,-41,-45,-52,-64,-72,-78,-80,-81,-78,-73,-70,-74,-74,-73,-71,-67,-64,-64,-65,-67,-67,-77,-73,-70,-69,-70,-70,-65,-61,-61,-61,-62,-57,-50,-46,-46,-46,-48,-50,-50,-49,-51,-52,-53,-52,-52,-53,-54,-53,-51,-51,-52,-55,-57,-57,-56,-60,-62,-62,-60,-62,-64,-64,-67,-68,-69,-68,-70,-70,-72,-73,-75,-76,-76,-77,-78,-77,-77,-76,-77,-79,-84,-85,-88,-22,-11,-19,-48,-54,-52,-42,-36,-36,-43,-62,-67,-75,-74,-77,-72,-64,-57,-56,-53,-50,-51,-48,-45,-43,-39,-37,-37,-43,-44,-44,-44,-45,-44,-41,-41,-41,-43,-46,-45,-46,-46,-45,-46,-47,-48,-48,-48,-48,-50,-50,-50,-51,-52,-51,-51,-51,-51,-53,-56,-56,-58,-57,-60,-63,-63,-62,-64,-65,-65,-66,-67,-67,-68,-68,-70,-71,-72,-72,-72,-72,-72,-73,-73,-73,-74,-75,-76,-79,-80,-82,-21,-15,-17,-36,-40,-37,-30,-27,-26,-26,-31,-29,-34,-37,-41,-37,-32,-28,-29,-30,-32,-35,-35,-34,-33,-31,-29,-30,-31,-33,-35,-37,-37,-38,-40,-40,-40,-42,-43,-44,-44,-45,-45,-46,-47,-47,-47,-46,-46,-47,-47,-47,-48,-49,-50,-51,-50,-51,-53,-56,-56,-58,-60,-60,-61,-62,-62,-63,-63,-65,-66,-67,-66,-67,-67,-67,-67,-69,-70,-69,-69,-71,-71,-72,-73,-74,-75,-75,-77,-77,-79,-17,-16,-15,-18,-18,-18,-19,-19,-19,-18,-18,-19,-20,-20,-22,-21,-21,-21,-25,-25,-25,-27,-27,-28,-28,-27,-28,-30,-31,-32,-32,-33,-34,-35,-36,-37,-37,-38,-39,-40,-42,-43,-43,-43,-44,-44,-44,-44,-45,-45,-45,-46,-46,-46,-48,-48,-49,-50,-52,-54,-55,-57,-58,-58,-58,-59,-60,-59,-61,-62,-64,-65,-66,-66,-66,-66,-67,-69,-70,-71,-72,-73,-73,-73,-75,-76,-77,-77,-79,-79,-80,-9,-10,-10,-11,-12,-13,-14,-15,-15,-15,-17,-18,-18,-18,-18,-19,-19,-20,-22,-23,-23,-25,-26,-25,-26,-26,-27,-28,-28,-30,-31,-31,-32,-33,-34,-35,-36,-37,-37,-39,-40,-41,-42,-43,-43,-44,-44,-45,-46,-45,-45,-46,-45,-46,-48,-48,-50,-51,-53,-54,-55,-56,-58,-57,-58,-59,-59,-60,-61,-63,-64,-65,-66,-67,-69,-69,-70,-72,-73,-75,-77,-77,-77,-77,-78,-78,-80,-80,-80,-82,-82,-4,-5,-7,-8,-9,-9,-10,-11,-12,-13,-13,-15,-16,-16,-17,-17,-18,-19,-19,-21,-22,-24,-24,-24,-24,-25,-26,-28,-27,-28,-30,-31,-31,-32,-34,-36,-35,-37,-38,-40,-40,-41,-43,-42,-44,-45,-46,-47,-46,-47,-48,-48,-49,-50,-51,-52,-53,-54,-56,-57,-57,-59,-60,-58,-59,-61,-63,-63,-64,-66,-66,-67,-69,-71,-72,-74,-75,-76,-78,-79,-79,-78,-79,-78,-80,-84,-85,-86,-85,-88,-90,-1,-2,-4,-5,-6,-7,-8,-10,-10,-10,-12,-14,-14,-16,-17,-18,-19,-19,-20,-21,-21,-22,-24,-25,-25,-24,-25,-27,-28,-29,-31,-31,-32,-33,-35,-37,-37,-39,-41,-42,-42,-44,-45,-45,-47,-48,-48,-48,-49,-51,-53,-54,-55,-54,-55,-55,-56,-58,-59,-60,-60,-63,-63,-61,-61,-65,-68,-67,-68,-70,-72,-75,-79,-79,-80,-81,-83,-86,-85,-86,-85,-83,-87,-90,-95,-103,-100,-107,-113,-114,-117,0,-1,-3,-5,-6,-6,-7,-9,-10,-10,-11,-14,-15,-16,-18,-20,-21,-22,-23,-23,-24,-25,-26,-26,-26,-26,-26,-29,-30,-31,-32,-34,-35,-37,-38,-39,-41,-42,-43,-45,-45,-45,-46,-47,-48,-49,-49,-50,-50,-52,-54,-55,-56,-56,-58,-60,-61,-63,-65,-67,-70,-75,-74,-72,-82,-88,-88,-86,-84,-87,-96,-102,-107,-105,-110,-110,-111,-108,-102,-103,-105,-105,-104,-100,-103,-110,-111,-117,-127,-127,-128]},"heights":{"Maison (n° 70, 1½ étage, stuc)":7.05,"Abri d'été":2.66,"Remise est (vinyle)":4.05,"Serre est":3.39,"Remise nord-ouest (vinyle)":16.51,"Serre nord-ouest":4.42},"trees":[{"sp":"arbre-ex-c","x":74.45,"z":47.85,"h":24.9,"w":7.0},{"sp":"arbre-ex-c","x":21.86,"z":47.58,"h":24.8,"w":6.9},{"sp":"arbre-ex-c","x":14.18,"z":34.08,"h":24.4,"w":6.8},{"sp":"arbre-ex-c","x":13.4,"z":22.51,"h":24.3,"w":6.8},{"sp":"arbre-ex-c","x":77.06,"z":46.01,"h":23.5,"w":6.6},{"sp":"arbre-ex-c","x":38.39,"z":55.62,"h":23.2,"w":6.5},{"sp":"arbre-ex-c","x":78.38,"z":49.09,"h":22.9,"w":6.4},{"sp":"arbre-ex-c","x":22.51,"z":45.12,"h":22.6,"w":6.3},{"sp":"arbre-ex-f","x":61.09,"z":37.0,"h":21.5,"w":10.5},{"sp":"arbre-ex-f","x":71.6,"z":37.15,"h":21.1,"w":9.5},{"sp":"arbre-ex-c","x":13.4,"z":30.52,"h":21.0,"w":5.9},{"sp":"arbre-ex-c","x":36.21,"z":58.49,"h":20.9,"w":5.9},{"sp":"arbre-ex-f","x":56.02,"z":62.23,"h":20.1,"w":12.5},{"sp":"arbre-ex-f","x":81.65,"z":36.77,"h":19.9,"w":9.5},{"sp":"arbre-ex-c","x":9.69,"z":33.8,"h":19.9,"w":5.6},{"sp":"arbre-ex-c","x":13.18,"z":17.98,"h":19.6,"w":5.5},{"sp":"arbre-ex-c","x":16.68,"z":18.2,"h":19.2,"w":5.4},{"sp":"arbre-ex-f","x":76.07,"z":61.98,"h":17.9,"w":11.5},{"sp":"arbre-ex-c","x":9.6,"z":19.26,"h":17.8,"w":5.0},{"sp":"arbre-ex-f","x":80.06,"z":54.21,"h":17.6,"w":7.9},{"sp":"arbre-ex-c","x":37.08,"z":60.55,"h":15.7,"w":4.4},{"sp":"arbre-ex-f","x":52.64,"z":27.95,"h":15.6,"w":7.0},{"sp":"arbre-ex-c","x":8.38,"z":22.69,"h":15.3,"w":4.3},{"sp":"arbre-ex-f","x":88.07,"z":30.16,"h":14.7,"w":6.6},{"sp":"arbre-ex-c","x":41.82,"z":56.84,"h":14.4,"w":4.0},{"sp":"arbre-ex-c","x":19.2,"z":17.86,"h":11.5,"w":3.2},{"sp":"arbre-ex-f","x":46.18,"z":3.01,"h":10.4,"w":4.7},{"sp":"arbre-ex-c","x":73.17,"z":52.28,"h":9.8,"w":2.7},{"sp":"arbre-ex-f","x":19.42,"z":22.38,"h":9.7,"w":4.4},{"sp":"arbre-ex-f","x":64.33,"z":9.14,"h":9.5,"w":4.3},{"sp":"arbre-ex-f","x":66.7,"z":11.3,"h":9.5,"w":4.3},{"sp":"arbre-ex-f","x":11.38,"z":46.93,"h":9.3,"w":4.2},{"sp":"arbre-ex-f","x":82.15,"z":60.85,"h":8.9,"w":4.0},{"sp":"arbre-ex-f","x":4.73,"z":24.97,"h":8.6,"w":3.9},{"sp":"arbre-ex-f","x":44.24,"z":9.9,"h":8.4,"w":3.8},{"sp":"arbre-ex-f","x":8.95,"z":53.79,"h":8.1,"w":3.6},{"sp":"arbre-ex-f","x":25.6,"z":19.76,"h":8.0,"w":3.6},{"sp":"arbre-ex-f","x":11.1,"z":51.42,"h":8.0,"w":3.6},{"sp":"arbre-ex-f","x":15.63,"z":59.22,"h":7.9,"w":3.6},{"sp":"arbre-ex-f","x":27.41,"z":54.94,"h":7.7,"w":3.5},{"sp":"arbre-ex-f","x":14.96,"z":13.59,"h":7.6,"w":3.4},{"sp":"arbre-ex-f","x":54.77,"z":50.13,"h":7.6,"w":3.4},{"sp":"arbre-ex-f","x":57.38,"z":48.29,"h":7.5,"w":4.5},{"sp":"arbre-ex-f","x":27.31,"z":24.37,"h":7.1,"w":3.2},{"sp":"arbre-ex-f","x":17.02,"z":12.71,"h":7.0,"w":3.5},{"sp":"arbre-ex-f","x":21.46,"z":54.07,"h":6.9,"w":3.1},{"sp":"arbre-ex-f","x":5.86,"z":47.09,"h":6.8,"w":3.1},{"sp":"arbre-ex-f","x":4.52,"z":52.51,"h":6.7,"w":3.5},{"sp":"arbre-ex-f","x":22.42,"z":30.58,"h":6.6,"w":3.5},{"sp":"arbre-ex-f","x":32.05,"z":4.63,"h":6.5,"w":2.9},{"sp":"arbre-ex-f","x":42.94,"z":30.86,"h":6.4,"w":3.0},{"sp":"arbre-ex-f","x":48.64,"z":11.68,"h":6.3,"w":2.8},{"sp":"arbre-ex-f","x":7.89,"z":46.71,"h":6.2,"w":2.8},{"sp":"arbre-ex-f","x":1.42,"z":5.73,"h":5.9,"w":2.7},{"sp":"arbre-ex-f","x":8.51,"z":44.75,"h":5.9,"w":2.7},{"sp":"arbre-ex-f","x":25.39,"z":55.31,"h":5.6,"w":2.5},{"sp":"arbre-ex-f","x":12.16,"z":58.5,"h":5.6,"w":2.5},{"sp":"arbre-ex-f","x":12.17,"z":66.51,"h":5.6,"w":3.5},{"sp":"arbre-ex-f","x":18.96,"z":53.91,"h":5.5,"w":2.5},{"sp":"arbre-ex-f","x":4.88,"z":14.46,"h":5.2,"w":5.5},{"sp":"arbre-ex-f","x":18.98,"z":5.32,"h":5.1,"w":3.5},{"sp":"arbre-ex-f","x":10.56,"z":11.81,"h":5.1,"w":6.0},{"sp":"arbre-ex-f","x":14.56,"z":44.12,"h":5.1,"w":2.5},{"sp":"arbre-ex-f","x":31.59,"z":52.19,"h":5.1,"w":2.3},{"sp":"arbre-ex-f","x":22.24,"z":57.62,"h":5.1,"w":2.3},{"sp":"arbre-ex-f","x":45.81,"z":33.04,"h":5.0,"w":4.5},{"sp":"arbre-ex-f","x":18.23,"z":9.28,"h":4.9,"w":4.5},{"sp":"arbre-ex-f","x":14.22,"z":49.61,"h":4.6,"w":2.1},{"sp":"arbre-ex-f","x":27.76,"z":57.47,"h":4.6,"w":2.1},{"sp":"arbre-ex-f","x":29.51,"z":61.58,"h":4.6,"w":2.1},{"sp":"arbre-ex-f","x":89.0,"z":7.17,"h":4.5,"w":2.5},{"sp":"arbre-ex-f","x":22.16,"z":10.53,"h":4.5,"w":3.5},{"sp":"arbre-ex-f","x":26.9,"z":6.82,"h":4.4,"w":2.0},{"sp":"arbre-ex-f","x":8.14,"z":42.72,"h":4.4,"w":2.0},{"sp":"arbre-ex-f","x":10.59,"z":3.29,"h":4.3,"w":2.0},{"sp":"arbre-ex-f","x":24.67,"z":58.78,"h":4.3,"w":1.9},{"sp":"arbre-ex-f","x":31.74,"z":25.65,"h":4.2,"w":2.0},{"sp":"arbre-ex-f","x":51.46,"z":38.9,"h":4.2,"w":1.9},{"sp":"arbre-ex-f","x":37.63,"z":11.49,"h":4.1,"w":2.5},{"sp":"arbre-ex-f","x":22.54,"z":36.6,"h":3.9,"w":2.0},{"sp":"arbre-ex-f","x":15.28,"z":56.69,"h":3.9,"w":1.8},{"sp":"arbre-ex-f","x":5.94,"z":5.51,"h":3.8,"w":1.7},{"sp":"arbre-ex-f","x":5.14,"z":42.53,"h":3.8,"w":1.7},{"sp":"arbre-ex-f","x":28.09,"z":3.88,"h":3.7,"w":2.5},{"sp":"arbre-ex-f","x":30.12,"z":27.55,"h":3.6,"w":1.6},{"sp":"arbre-ex-f","x":63.47,"z":47.16,"h":3.6,"w":3.5},{"sp":"arbre-ex-f","x":58.5,"z":6.28,"h":3.4,"w":1.6},{"sp":"arbre-ex-f","x":37.69,"z":2.48,"h":3.2,"w":2.5},{"sp":"arbre-ex-f","x":8.79,"z":40.25,"h":3.1,"w":1.6},{"sp":"arbre-ex-f","x":28.84,"z":7.94,"h":2.9,"w":1.6},{"sp":"arbre-ex-f","x":3.93,"z":61.99,"h":2.8,"w":1.6},{"sp":"arbre-ex-f","x":41.5,"z":5.72,"h":2.6,"w":1.6},{"sp":"arbre-ex-f","x":22.16,"z":2.51,"h":2.5,"w":1.6},{"sp":"arbre-ex-f","x":30.18,"z":10.53,"h":2.5,"w":1.6}]};
+function applyLidar(s){
+  s.terrain.elev=JSON.parse(JSON.stringify(LIDAR.elev)); s.terrain.north=3.9;
+  s.terrain.lidar={tile:LIDAR.meta.tile,date:LIDAR.meta.date,crs:LIDAR.meta.crs,rot:LIDAR.meta.rot,house:LIDAR.meta.house,corners:LIDAR.meta.corners};
+  const H=LIDAR.heights;
+  s.zones.forEach(z=>{ const top=H[z.name]; if(top==null) return; const roof=(z.type==='batiment'||z.type==='serre')? Math.min(z.w,z.d)*.32 : 0; const hh=+(top-roof).toFixed(2); if(hh>1.2 && hh<8) z.h=hh; });
+  if(!s.plants.some(p=>p.sp==='arbre-ex-f'||p.sp==='arbre-ex-c')) LIDAR.trees.forEach(t=>s.plants.push({id:uid(),sp:t.sp,x:t.x,z:t.z,h:t.h,w:t.w,date:'1990-06-01',note:`Mesuré au LiDAR (avril 2023) : ${String(t.h).replace('.',',')} m de haut.`,lidar:true}));
+  s.site.lat=48.4645; s.site.lon=-70.9935; s.terrain.lat=48.4645;
+  return s;
+}
+function realState(){
+  const s=blankState();
+  s.terrain.name='70, rue Gauthier — lots 5 511 832 et 5 511 834';
+  s.terrain.w=REAL.w; s.terrain.d=REAL.d; s.terrain.lots=JSON.parse(JSON.stringify(REAL.lots)); s.terrain.markers=JSON.parse(JSON.stringify(REAL.markers));
+  s.zones=REAL.zones.map(z=>Object.assign({id:uid(),rot:0,h:(ZT[z.type]||ZT.platebande).h},z));
+  s.plants=REAL.plants.map(p=>Object.assign({id:uid()},p));
+  s.site.lot='5 511 832 et 5 511 834'; s.site.area=3237.2; applyLidar(s);
+  s.site.note='Certificat de localisation (minute 8044, Gaétan Taillon a.-g., 20 déc. 2019). Lot 5 511 832 : 2 341,3 m² (sud 46,15 m, ouest 58,04 m, nord 34,73 m, est 60,93 m). Lot 5 511 834 : 895,9 m², vacant (nord 38,28 m, ouest 27,43 m, sud 28,65 m, est 28,01 m). Le nord du terrain est en zone de contrainte et de protection « talus roc ». Clôtures ouest et nord à l\'intérieur du lot. Servitude d\'utilité publique (1951) en faveur de la Compagnie Électrique du Saguenay. Limite ouest bornée (procès-verbal 1983).';
+  return s;
+}
+function lotsArea(){ const L=state.terrain.lots; return (L&&L.length)? L.reduce((a,l)=>a+(l.area||polyArea(l.pts)),0) : state.terrain.w*state.terrain.d; }
+function polyArea(p){ let a=0; for(let i=0;i<p.length;i++){ const [x1,z1]=p[i],[x2,z2]=p[(i+1)%p.length]; a+=x1*z2-x2*z1; } return Math.abs(a)/2; }
+function migrate(s){
+  const b=blankState();
+  if(s.terrain && s.terrain.lots && !s.terrain.elev){ s.site=Object.assign({},b.site,s.site||{}); applyLidar(s); }
+  s.site=Object.assign({},b.site,s.site||{}); s.media=s.media||[]; s.models=s.models||[]; s.tasks=s.tasks||[]; s.done=s.done||{}; s.harvests=s.harvests||[];
+  s.terrain=Object.assign({},b.terrain,s.terrain||{});
+  return s;
+}
+function exampleState(){
+  const s = blankState();
+  const Y = Y0;
+  s.example = true;
+  s.terrain.name = 'Exemple à remplacer — 32 × 24 m';
+  s.terrain.w = 32; s.terrain.d = 24;
+  const Z=(type,name,x,z,w,d,o)=>{const zz=Object.assign({id:uid(),type,name,x,z,w,d,rot:0,h:ZT[type].h},o||{});s.zones.push(zz);return zz;};
+  Z('pelouse','Pelouse',14,17.5,15,10);
+  Z('batiment','Maison',15,5,12,8,{h:3});
+  Z('terrasse','Terrasse',15,11,8,4);
+  Z('allee','Allée du potager',23.4,14.5,1.2,13);
+  const b1=Z('potager','Bac 1',25.6,12,1.2,3.6), b2=Z('potager','Bac 2',28,12,1.2,3.6), b3=Z('potager','Bac 3',25.6,17,1.2,3.6), b4=Z('potager','Bac 4',28,17,1.2,3.6);
+  Z('batiment','Cabanon',26.5,21.8,3,2.5,{h:2.4});
+  Z('compost','Compost',30.3,22,1.6,1.6);
+  const pbA=Z('platebande','Plate-bande soleil',5,11.5,6,2.6);
+  const pbO=Z('platebande','Plate-bande ombre',1.8,6,2.4,7);
+  const P=(sp,x,z,date)=>s.plants.push({id:uid(),sp,x,z,date,note:''});
+  P('erable',3.5,2.5,'2006-05-15');
+  for(let z=13.5;z<=23.2;z+=.7) P('thuya',.6,+z.toFixed(2),'2019-05-20');
+  P('pommier',4.5,21,'2023-05-10'); P('prunier',14,21.6,'2024-05-10'); P('cerisier',18.6,21.2,'2025-05-15');
+  P('poirier',9.2,21.4,iso(Y+1,5,10));
+  for(let x=23;x<=28.4;x+=.6) P('framboisier',+x.toFixed(2),2,'2024-05-20');
+  P('bleuetier',31,4,'2025-05-25'); P('bleuetier',31,6,'2025-05-25');
+  P('camerisier',25,5,iso(Y+1,5,15)); P('camerisier',27.2,5,iso(Y+1,5,15));
+  P('rhubarbe',30.5,8.6,'2023-05-01');
+  P('hosta',1.5,3.4,'2022-05-20'); P('hosta',2.1,5,'2022-05-20'); P('astilbe',1.4,6.6,'2023-05-20'); P('hosta',2.1,8.2,'2022-05-20'); P('astilbe',1.5,9.1,'2023-05-20');
+  const pa = [['hydrangee',2.9,11.5],['echinacee',4.3,10.8],['echinacee',4.9,12.3],['rudbeckia',5.6,10.8],['lavande',6.2,12.3],['lavande',6.9,12.3],['calamagrostis',7.4,10.8],['hemerocalle',3.9,12.4],['rosier',6.6,10.9]];
+  pa.forEach(([sp,x,z])=>P(sp,x,z,'2024-06-01'));
+  P('pivoine',7.6,12.2,iso(Y+1,9,15));
+  P('fraisier',22,8.2,'2025-05-15');P('fraisier',22.4,8.6,'2025-05-15');P('fraisier',22,9,'2025-05-15');
+  // Potager : saison actuelle et saison suivante
+  fillZone(s,b1,'tomate',iso(Y,6,1)); fillZone(s,b1,'haricot',iso(Y+1,6,5));
+  fillZone(s,b2,'haricot',iso(Y,6,5)); fillZone(s,b2,'tomate',iso(Y+1,6,1));
+  fillZone(s,b3,'courgette',iso(Y,6,5)); fillZone(s,b3,'concombre',iso(Y+1,6,5));
+  fillZone(s,b4,'laitue',iso(Y,5,10)); fillZone(s,b4,'ail',iso(Y,10,15));
+  s.tasks.push({id:uid(),date:iso(Y+1,3,1),title:'Commander les plants de camerisier (2 variétés)',done:false});
+  s.tasks.push({id:uid(),date:iso(Y+1,4,12),title:'Analyse de sol des bacs potagers',done:false});
+  s.harvests.push({id:uid(),sp:'tomate',date:iso(Y,8,28),qty:14.5,unit:'kg',note:'Bac 1'});
+  s.harvests.push({id:uid(),sp:'framboisier',date:iso(Y,7,22),qty:1.8,unit:'kg',note:''});
+  s.harvests.push({id:uid(),sp:'courgette',date:iso(Y,8,10),qty:9,unit:'kg',note:''});
+  return s;
+}
+function fillZone(s,z,spId,date){
+  const sp = SP[spId], step = Math.max(.05, sp.sp||sp.w);
+  const nx = Math.max(1,Math.floor(z.w/step)), nz = Math.max(1,Math.floor(z.d/step));
+  const out=[]; const a = (z.rot||0)*Math.PI/180;
+  for(let i=0;i<nx;i++) for(let j=0;j<nz;j++){
+    if(out.length>=240) break;
+    const lx = -z.w/2 + (i+.5)*(z.w/nx), lz = -z.d/2 + (j+.5)*(z.d/nz);
+    const x = z.x + lx*Math.cos(a) - lz*Math.sin(a), zz = z.z + lx*Math.sin(a) + lz*Math.cos(a);
+    const p={id:uid(),sp:spId,x:+x.toFixed(2),z:+zz.toFixed(2),date,note:''}; s.plants.push(p); out.push(p);
+  }
+  return out;
+}
+
+/* =========================================================
+   Modèle de croissance et de calendrier
+   ========================================================= */
+const vIdx = ()=>view.y*12+view.m-1;
+function ageAt(p,y,m){ const d=pd(p.date); return ((y*12+m-1)-(d.y*12+d.m-1))/12; }
+function isPlanned(p){ return p.date > TODAY_ISO; }
+function annualWindow(p){ // mois absolus [début, fin] de présence en terre
+  const s=SP[p.sp], d=pd(p.date); const start=d.y*12+d.m-1;
+  const lastRc = s.rc ? Math.max(...s.rc) : d.m+3;
+  const end = s.rcNext ? (d.y+1)*12+lastRc-1 : d.y*12+Math.max(lastRc,d.m)-1;
+  return [start,end];
+}
+// Retourne {f: facteur de taille 0..1, vis, ghost, phase}
+function growth(p,y,m){
+  const s=SP[p.sp]; const idx=y*12+m-1; const d=pd(p.date); const pIdx=d.y*12+d.m-1;
+  if(s.life==='annuelle'){
+    const [a,b]=annualWindow(p);
+    if(idx<a){ return (idx>=a-6 && y===d.y) || (idx>=a-3) ? {f:.25,vis:true,ghost:true,phase:'Planifié'} : {f:0,vis:false}; }
+    if(idx>b) return {f:0,vis:false};
+    const span=Math.max(1,b-a); let f=.25+.75*clamp((idx-a)/span*1.4,0,1);
+    if(s.rcNext && m>=11 || s.rcNext && m<=3) f=.18;
+    const harvesting = s.rc && s.rc.includes(m);
+    return {f,vis:true,ghost:false,phase:harvesting?'En récolte':'En croissance'};
+  }
+  const age=(idx-pIdx)/12;
+  if(age<0) return {f:baseGrowth(s,0),vis:true,ghost:true,phase:'Planifié'};
+  let f=baseGrowth(s,age);
+  if(s.life==='vivace'){ const seas={12:.08,1:.08,2:.08,3:.1,4:.4,5:.75,11:.2}[m]; if(seas) f*=seas; }
+  const phase = baseGrowth(s,age)>=.97 ? 'Mature' : (age<1?'Jeune plant':'En croissance');
+  return {f,vis:true,ghost:false,phase};
+}
+const PH=p=>p.h||SP[p.sp].h, PW=p=>p.w||SP[p.sp].w;
+function baseGrowth(s,age){
+  if(s.life==='vivace') return Math.min(1,.35+.65*age/s.yrs);
+  const x=Math.min(1,age/s.yrs); return .12+.88*(1-(1-x)*(1-x));
+}
+function yieldAt(p,Y){
+  const s=SP[p.sp]; if(!s.yld) return 0; const d=pd(p.date);
+  if(s.life==='annuelle') return ((s.rcNext? d.y+1 : d.y)===Y) ? s.yld : 0;
+  const age=Y-d.y; if(age<s.first) return 0;
+  return s.yld*Math.min(1,(age-s.first+1)/Math.max(1,s.yrs-s.first+1));
+}
+function tasksFor(Y){
+  const map=new Map();
+  const add=(m,kind,title,sp)=>{ const k=`${m}|${kind}|${title}`; const o=map.get(k); if(o) o.n++; else map.set(k,{m,kind,title,sp,n:1,key:`${Y}|${k}`}); };
+  for(const p of state.plants){
+    const s=SP[p.sp]; if(!s) continue; const d=pd(p.date);
+    if(s.life==='annuelle'){
+      if(d.y===Y){
+        (s.si||[]).filter(m=>m<d.m).forEach(m=>add(m,'semis',`Semis intérieur — ${s.n}`,s.id));
+        add(d.m, s.pl?'plantation':'semis', s.pl?`Repiquer au jardin — ${s.n}`:`Semer en place — ${s.n}`, s.id);
+        (s.se||[]).filter(m=>m>d.m).forEach(m=>add(m,'semis',`Semis successif — ${s.n}`,s.id));
+        (s.care||[]).forEach(([ms,k,t])=>ms.filter(m=>m>=d.m||s.rcNext).forEach(m=>add(m,k,`${t} — ${s.n}`,s.id)));
+        if(!s.rcNext) (s.rc||[]).filter(m=>m>=d.m).forEach(m=>add(m,'recolte',`Récolte — ${s.n}`,s.id));
+      }
+      if(s.rcNext && d.y+1===Y){
+        (s.careNext||[]).forEach(([ms,k,t])=>ms.forEach(m=>add(m,k,`${t} — ${s.n}`,s.id)));
+        (s.rc||[]).forEach(m=>add(m,'recolte',`Récolte — ${s.n}`,s.id));
+      }
+    } else {
+      if(d.y===Y){ add(d.m,'plantation',`Planter — ${s.n}`,s.id); }
+      if(isPlanned(p) && d.y===Y && d.m>1) add(d.m-1,'plantation',`Préparer l'emplacement / acheter — ${s.n}`,s.id);
+      if(Y>d.y || Y===d.y){
+        (s.care||[]).forEach(([ms,k,t])=>ms.forEach(m=>{ if(Y>d.y||m>d.m) add(m,k,`${t} — ${s.n}`,s.id); }));
+        if(s.rc && Y-d.y>=s.first) s.rc.forEach(m=>add(m,'recolte',`Récolte — ${s.n}`,s.id));
+      }
+    }
+  }
+  const list=[...map.values()];
+  for(const t of state.tasks){ const d=pd(t.date); if(d.y===Y) list.push({m:d.m,kind:'perso',title:t.title,n:1,custom:t,key:'c|'+t.id,day:d.d}); }
+  const order=['semis','plantation','entretien','taille','recolte','perso'];
+  list.sort((a,b)=>a.m-b.m || order.indexOf(a.kind)-order.indexOf(b.kind) || a.title.localeCompare(b.title,'fr'));
+  return list;
+}
+function zoneAt(x,z,exclude){
+  let best=null;
+  for(const zn of state.zones){
+    if(zn.type==='batiment'||zn.type==='reseau'||zn.type==='serre'||zn.id===exclude) continue;
+    const a=(zn.rot||0)*Math.PI/180, dx=x-zn.x, dz=z-zn.z;
+    const lx=dx*Math.cos(a)-dz*Math.sin(a)*-1*-1, lz=dx*Math.sin(a)*-1+dz*Math.cos(a);
+    const lx2 = dx*Math.cos(a)+dz*Math.sin(a), lz2 = -dx*Math.sin(a)+dz*Math.cos(a);
+    if(Math.abs(lx2)<=zn.w/2 && Math.abs(lz2)<=zn.d/2){ if(!best || zn.h>best.h) best=zn; }
+  }
+  return best;
+}
+function zoneOfPlant(p){ return zoneAt(p.x,p.z); }
+
+/* =========================================================
+   Scène 3D
+   ========================================================= */
+const stage=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+stage.prepend(renderer.domElement);
+const scene=new THREE.Scene();
+const persp=new THREE.PerspectiveCamera(45,1,.1,2000);
+const ortho=new THREE.OrthographicCamera(-10,10,10,-10,.1,2000);
+let camera=persp, controls=null;
+const hemi=new THREE.HemisphereLight(0xe8f1ff,0x5b5038,.55); scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xfff3dd,1.0); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.0006; scene.add(sun); scene.add(sun.target);
+const world=new THREE.Group(); scene.add(world);
+const zoneGroup=new THREE.Group(), plantGroup=new THREE.Group(), helpGroup=new THREE.Group();
+world.add(zoneGroup,plantGroup,helpGroup);
+let ground, photoPlane, grid, previewMesh=null, selOutline=null;
+const GEO={
+  ico:new THREE.IcosahedronGeometry(1,1),
+  cone:new THREE.ConeGeometry(1,1,8).translate(0,.5,0),
+  cyl:new THREE.CylinderGeometry(1,1,1,9).translate(0,.5,0),
+  trunk:new THREE.CylinderGeometry(.5,.7,1,7).translate(0,.5,0),
+  ring:new THREE.RingGeometry(.96,1,48).rotateX(-Math.PI/2),
+  disc:new THREE.CircleGeometry(1,32).rotateX(-Math.PI/2),
+};
+const trunkMat=new THREE.MeshStandardMaterial({color:0x6b5040,roughness:1});
+const plantObjs=new Map(); let pickables=[];
+
+function elevAt(x,z){
+  const E=state.terrain.elev; if(!E) return 0;
+  const fx=clamp(x/E.step,0,E.nx-1.001), fz=clamp(z/E.step,0,E.nz-1.001); const i=Math.floor(fx), j=Math.floor(fz), u=fx-i, v=fz-j;
+  const g=(a,b)=>E.data[b*E.nx+a]/100;
+  return (g(i,j)*(1-u)+g(i+1,j)*u)*(1-v)+(g(i,j+1)*(1-u)+g(i+1,j+1)*u)*v;
+}
+function elevStats(){ const E=state.terrain.elev; if(!E) return null; let mn=1e9,mx=-1e9; (state.terrain.lots||[]).forEach(l=>{ const xs=l.pts.map(p=>p[0]), zs=l.pts.map(p=>p[1]); for(let x=Math.min(...xs);x<=Math.max(...xs);x+=1) for(let z=Math.min(...zs);z<=Math.max(...zs);z+=1){ if(inPoly(x,z,l.pts)){ const e=elevAt(x,z); mn=Math.min(mn,e); mx=Math.max(mx,e);} } }); return {mn:mn+E.base,mx:mx+E.base}; }
+function inPoly(x,z,pts){ let c=false; for(let i=0,j=pts.length-1;i<pts.length;j=i++){ const [xi,zi]=pts[i],[xj,zj]=pts[j]; if(((zi>z)!==(zj>z)) && (x<(xj-xi)*(z-zi)/(zj-zi)+xi)) c=!c; } return c; }
+const toW=(x,z)=>[x-state.terrain.w/2, z-state.terrain.d/2];
+const fromW=(wx,wz)=>[wx+state.terrain.w/2, wz+state.terrain.d/2];
+const cssVar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function buildGround(){
+  [ground,photoPlane,grid].forEach(o=>{ if(o){ world.remove(o); o.geometry.dispose(); if(o.material.map) o.material.map.dispose(); o.material.dispose(); }});
+  const {w,d}=state.terrain;
+  const hasE=!!state.terrain.elev; const sx=hasE?Math.ceil(w/.5):1, sz=hasE?Math.ceil(d/.5):1;
+  const gGeo=new THREE.PlaneGeometry(w,d,sx,sz).rotateX(-Math.PI/2);
+  const grass=new THREE.Color(cssVar('--ground')||'#9fb07f'), outside=grass.clone().lerp(new THREE.Color('#8f8a78'),.4);
+  const lots=state.terrain.lots||[]; let minE=0;
+  { const pos=gGeo.attributes.position, cols=new Float32Array(pos.count*3);
+    for(let i=0;i<pos.count;i++){ const ax=pos.getX(i)+w/2, az=pos.getZ(i)+d/2; const e=elevAt(ax,az); pos.setY(i,e); minE=Math.min(minE,e);
+      const c=(!lots.length || lots.some(l=>inPoly(ax,az,l.pts)))? grass : outside; cols[i*3]=c.r; cols[i*3+1]=c.g; cols[i*3+2]=c.b; }
+    gGeo.setAttribute('color',new THREE.BufferAttribute(cols,3)); gGeo.computeVertexNormals(); }
+  ground=new THREE.Mesh(gGeo, new THREE.MeshStandardMaterial({vertexColors:true,roughness:1}));
+  ground.receiveShadow=true; ground.userData.ground=true; world.add(ground);
+  // Sous-sol pour la profondeur
+  const base=new THREE.Mesh(new THREE.BoxGeometry(w,.6,d), new THREE.MeshStandardMaterial({color:0x6e5440,roughness:1})); base.position.y=minE-.32; ground.add(base);
+  lots.forEach(l=>{
+    const pts=[]; l.pts.forEach((a,i)=>{ const b=l.pts[(i+1)%l.pts.length]; const L=Math.hypot(b[0]-a[0],b[1]-a[1]); const n=Math.max(1,Math.ceil(L)); for(let k=0;k<=n;k++){ const x=a[0]+(b[0]-a[0])*k/n, z=a[1]+(b[1]-a[1])*k/n; pts.push(new THREE.Vector3(x-w/2,elevAt(x,z)+.08,z-d/2)); } });
+    ground.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),new THREE.LineBasicMaterial({color:0xc8321e})));
+  });
+  (state.terrain.markers||[]).forEach(m=>{ const c=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,.5,10),new THREE.MeshStandardMaterial({color:0xc8321e})); c.position.set(m.pt[0]-w/2,elevAt(m.pt[0],m.pt[1])+.25,m.pt[1]-d/2); ground.add(c); });
+  photoPlane=new THREE.Mesh(gGeo.clone(), new THREE.MeshStandardMaterial({transparent:true,opacity:state.terrain.photoOp,roughness:1,depthWrite:false}));
+  photoPlane.position.y=.03; photoPlane.receiveShadow=true; photoPlane.visible=false; world.add(photoPlane);
+  applyPhoto();
+  const n=Math.max(w,d); grid=new THREE.GridHelper(Math.ceil(n),Math.ceil(n),0x000000,0x000000);
+  grid.material.transparent=true; grid.material.opacity=.09; grid.position.set((Math.ceil(n)-w)/2*0,.012,0);
+  grid.scale.set(1,1,1); world.add(grid); if(hasE){ grid.position.y=minE+.01; grid.material.depthTest=false; grid.material.opacity=.05; } grid.visible=document.getElementById('optGrid').checked;
+  const r=Math.max(w,d)*.75; Object.assign(sun.shadow.camera,{left:-r,right:r,top:r,bottom:-r,near:1,far:400}); sun.shadow.camera.updateProjectionMatrix();
+}
+function applyPhoto(){
+  if(!photoPlane) return;
+  if(photoPlane.material.map){ photoPlane.material.map.dispose(); photoPlane.material.map=null; }
+  if(photo){
+    new THREE.TextureLoader().load(photo,tex=>{ photoPlane.material.map=tex; photoPlane.material.needsUpdate=true; photoPlane.visible=true; });
+  } else photoPlane.visible=false;
+  photoPlane.material.opacity=state.terrain.photoOp;
+}
+function zoneMeshes(z){
+  const t=ZT[z.type]||ZT.platebande; const g=new THREE.Group(); const h=Math.max(.01,z.h??t.h);
+  const mat=new THREE.MeshStandardMaterial({color:z.color||t.border||t.col,roughness:t.glass?.2:.95,transparent:!!t.glass||z.type==='reseau',opacity:t.glass?.55:(z.type==='reseau'?.75:1)});
+  const r0=(z.rot||0)*Math.PI/180, cr=Math.cos(r0), sr=Math.sin(r0);
+  const corners=[[-1,-1],[1,-1],[1,1],[-1,1]].map(([a,b])=>elevAt(z.x+a*z.w/2*cr-b*z.d/2*sr, z.z+a*z.w/2*sr+b*z.d/2*cr));
+  const eMax=Math.max(...corners), eMin=Math.min(...corners);
+  const drape = state.terrain.elev && h<=.25 && z.type!=='bassin';
+  let gy=0;
+  if(drape){
+    const geo=new THREE.PlaneGeometry(z.w,z.d,Math.max(1,Math.ceil(z.w/.75)),Math.max(1,Math.ceil(z.d/.75))).rotateX(-Math.PI/2); const pos=geo.attributes.position;
+    for(let i=0;i<pos.count;i++){ const lx=pos.getX(i), lz=pos.getZ(i); pos.setY(i, elevAt(z.x+lx*cr-lz*sr, z.z+lx*sr+lz*cr)+Math.max(h,.03)+(z.type==='reseau'?.08:0)); }
+    geo.computeVertexNormals(); const m=new THREE.Mesh(geo,mat); m.receiveShadow=true; g.add(m);
+  } else {
+    gy=eMax; const skirt=(eMax-eMin)+.2; const H=h+skirt;
+    const box=new THREE.Mesh(new THREE.BoxGeometry(z.w,H,z.d),mat); box.position.y=h-H/2+(z.type==='reseau'?.05:0); box.castShadow=h>.2&&!t.glass; box.receiveShadow=true; g.add(box);
+  }
+  if(z.type==='potager'){
+    const soil=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.05,z.w-.12),.02,Math.max(.05,z.d-.12)),new THREE.MeshStandardMaterial({color:t.col,roughness:1}));
+    soil.position.y=h+.005; soil.receiveShadow=true; g.add(soil);
+  }
+  if(z.type==='batiment'||z.type==='serre'){
+    const rh=Math.min(z.w,z.d)*.32;
+    const roof=new THREE.Mesh(new THREE.ConeGeometry(1,1,4).rotateY(Math.PI/4).translate(0,.5,0),new THREE.MeshStandardMaterial({color:t.roof,roughness:.8,flatShading:true}));
+    roof.scale.set(z.w/Math.SQRT2*1.04,rh,z.d/Math.SQRT2*1.04); roof.position.y=h; roof.castShadow=true; g.add(roof);
+  }
+  g.children.forEach(c=>c.userData.zid=z.id);
+  const [wx,wz]=toW(z.x,z.z); g.position.set(wx,gy,wz); g.rotation.y=-(z.rot||0)*Math.PI/180;
+  g.userData.zid=z.id; return g;
+}
+function plantMesh(p){
+  const s=SP[p.sp]; const g=new THREE.Group();
+  const mat=new THREE.MeshStandardMaterial({color:s.col,roughness:.85,flatShading:true});
+  let crown;
+  if(s.shape==='cone') crown=new THREE.Mesh(GEO.cone,mat);
+  else if(s.shape==='colonne') crown=new THREE.Mesh(GEO.cyl,mat);
+  else crown=new THREE.Mesh(GEO.ico,mat);
+  crown.castShadow=true; crown.receiveShadow=true; crown.userData.pid=p.id; g.add(crown);
+  let trunk=null;
+  if(s.life==='ligneux' && (s.shape==='rond'||s.shape==='ovale'||s.shape==='cone')){ trunk=new THREE.Mesh(GEO.trunk,trunkMat); trunk.castShadow=true; trunk.userData.pid=p.id; g.add(trunk); }
+  const ring=new THREE.Mesh(GEO.ring,new THREE.MeshBasicMaterial({color:new THREE.Color(cssVar('--accent')||'#2d6a45'),transparent:true,opacity:.8,depthWrite:false}));
+  ring.position.y=.02; ring.visible=false; g.add(ring);
+  g.userData={pid:p.id,crown,trunk,ring,mat};
+  return g;
+}
+function placePlantGroup(p,g){
+  const [wx,wz]=toW(p.x,p.z); const zn=zoneOfPlant(p); const by=elevAt(p.x,p.z)+(zn? (zn.h??ZT[zn.type].h):0);
+  g.position.set(wx,by,wz); g.userData.baseY=by;
+}
+const tmpC=new THREE.Color(), winterC=new THREE.Color('#8b7c68'), springC=new THREE.Color('#b6d88a');
+function updatePlant(p){
+  const g=plantObjs.get(p.id); if(!g) return; const s=SP[p.sp]; const {crown,trunk,ring,mat}=g.userData;
+  const G=growth(p,view.y,view.m);
+  g.visible=G.vis;
+  if(!G.vis) return;
+  const f=Math.max(.04,G.f); const H=PH(p)*f, W=PW(p)*f; const m=view.m;
+  tmpC.set(s.col); let op=1;
+  if(s.decid){
+    if(m===10) tmpC.set(s.aut||'#c98a2a');
+    else if(m===11){ tmpC.copy(winterC); op=.35; }
+    else if(m<=3||m===12){ tmpC.copy(winterC); op=.22; }
+    else if(m===4) tmpC.lerp(springC,.6);
+  }
+  if(s.life==='vivace' && (m>=11||m<=3)) tmpC.copy(winterC);
+  if(s.fl && s.fl[1].includes(m) && !G.ghost) tmpC.lerp(new THREE.Color(s.fl[0]),.55);
+  if(G.ghost){ op=.28; }
+  mat.color.copy(tmpC); mat.transparent=op<1; mat.opacity=op; mat.depthWrite=op>=.5; mat.wireframe=G.ghost;
+  crown.castShadow=!G.ghost && op>.3;
+  if(trunk){
+    const th=s.shape==='cone'? H*.1 : (s.shape==='ovale'? H*.3 : H*.38);
+    const tr=Math.max(.04,W*.045);
+    trunk.scale.set(tr,th,tr); trunk.visible=!G.ghost;
+    if(s.shape==='cone'){ crown.scale.set(W/2,H-th,W/2); crown.position.y=th; }
+    else { const ch=H-th; crown.scale.set(W/2,ch/2,W/2); crown.position.y=th+ch/2; }
+  } else if(s.shape==='colonne'){ crown.scale.set(W/2,H,W/2); crown.position.y=0; }
+  else { crown.scale.set(W/2,H/2,W/2); crown.position.y=H/2*.9; }
+  const showRing = view.sel?.kind==='plant' && view.sel.id===p.id || G.ghost || document.getElementById('optRings').checked && s.life!=='annuelle';
+  ring.visible=showRing; ring.scale.set(PW(p)/2,1,PW(p)/2);
+  ring.material.opacity = (view.sel?.id===p.id)? .95 : .45;
+}
+function updateAllPlants(){ for(const p of state.plants) updatePlant(p); }
+function rebuildScene(){
+  zoneGroup.clear(); plantGroup.clear(); plantObjs.forEach(g=>g.userData.mat.dispose()); plantObjs.clear();
+  zoneGroup.children.forEach(c=>c.traverse(o=>{o.geometry?.dispose?.();}));
+  pickables=[];
+  const order=[...state.zones].sort((a,b)=>(a.h??0)-(b.h??0));
+  for(const z of order){ const g=zoneMeshes(z); zoneGroup.add(g); g.children.forEach(c=>pickables.push(c)); }
+  for(const p of state.plants){ if(!SP[p.sp]) continue; const g=plantMesh(p); placePlantGroup(p,g); plantGroup.add(g); plantObjs.set(p.id,g); pickables.push(g.userData.crown); if(g.userData.trunk) pickables.push(g.userData.trunk); }
+  updateAllPlants(); updateSelOutline(); syncModels();
+}
+function updateSelOutline(){
+  if(selOutline){ helpGroup.remove(selOutline); selOutline.geometry.dispose(); selOutline=null; }
+  if(view.sel?.kind!=='zone') return;
+  const z=state.zones.find(z=>z.id===view.sel.id); if(!z) return;
+  const h=(z.h??ZT[z.type].h)+(z.type==='batiment'? Math.min(z.w,z.d)*.32:0);
+  selOutline=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(z.w+.08,h+.08,z.d+.08)),new THREE.LineBasicMaterial({color:new THREE.Color(cssVar('--pollen')||'#b97d14')}));
+  const [wx,wz]=toW(z.x,z.z); selOutline.position.set(wx,h/2+elevAt(z.x,z.z),wz); selOutline.rotation.y=-(z.rot||0)*Math.PI/180; helpGroup.add(selOutline);
+}
+
+// Soleil
+function sunPosition(){
+  const D=Math.PI/180, lat=state.terrain.lat*D; const n=[15,46,74,105,135,166,196,227,258,288,319,349][view.m-1];
+  const dec=23.44*D*Math.sin(2*Math.PI*(284+n)/365), H=(view.h-12)*15*D;
+  const el=Math.asin(Math.sin(lat)*Math.sin(dec)+Math.cos(lat)*Math.cos(dec)*Math.cos(H));
+  const az=Math.atan2(Math.sin(H),Math.cos(H)*Math.sin(lat)-Math.tan(dec)*Math.cos(lat)); // depuis le sud, + vers l'ouest
+  return {el,az};
+}
+function updateSun(){
+  const {el,az}=sunPosition(); const N=(state.terrain.north||0)*Math.PI/180;
+  let dx=-Math.sin(az)*Math.cos(el), dz=Math.cos(az)*Math.cos(el), dy=Math.sin(el);
+  const rx=dx*Math.cos(N)-dz*Math.sin(N), rz=dx*Math.sin(N)+dz*Math.cos(N);
+  const R=Math.max(state.terrain.w,state.terrain.d)*2;
+  sun.position.set(rx*R,Math.max(.05,dy)*R,rz*R); sun.target.position.set(0,0,0);
+  const up=el>0; sun.intensity=up? .35+.85*Math.min(1,dy*2.2) : 0;
+  hemi.intensity=up? .55 : .25;
+  scene.background=new THREE.Color(cssVar('--sky')||'#cfdde3');
+  if(!up) scene.background.lerp(new THREE.Color('#1b2333'),.6);
+  document.getElementById('sunInfo').textContent= up? `Soleil ${fmt(el*180/Math.PI,0)}° de hauteur` : 'Soleil couché';
+}
+
+// Caméras
+function setupCamera(kind){
+  view.cam=kind; if(controls) controls.dispose();
+  const {w,d}=state.terrain; const n=Math.max(w,d);
+  if(kind==='3d'){
+    camera=persp; persp.position.set(w*.15,n*.75,d*.5+n*.55); camera.up.set(0,1,0);
+  } else {
+    camera=ortho; ortho.position.set(0,200,0); ortho.up.set(0,0,-1); ortho.zoom=1;
+  }
+  camera.lookAt(0,0,0);
+  controls=new THREE.OrbitControls(camera,renderer.domElement);
+  controls.enableDamping=true; controls.dampingFactor=.12; controls.target.set(0,0,0);
+  controls.maxPolarAngle= kind==='3d'? Math.PI*.48 : Math.PI; controls.screenSpacePanning=true;
+  if(kind==='plan'){ controls.enableRotate=false; controls.mouseButtons={LEFT:THREE.MOUSE.PAN,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.PAN}; controls.touches={ONE:THREE.TOUCH.PAN,TWO:THREE.TOUCH.DOLLY_PAN}; }
+  controls.update(); resize(); applyModeToControls();
+  document.getElementById('v3d').setAttribute('aria-pressed',kind==='3d'); document.getElementById('vplan').setAttribute('aria-pressed',kind==='plan');
+}
+function resize(){
+  const r=stage.getBoundingClientRect(); const w=Math.max(10,r.width), h=Math.max(10,r.height);
+  renderer.setSize(w,h,false); persp.aspect=w/h; persp.updateProjectionMatrix();
+  const a=w/h, {w:W,d:D}=state.terrain; const half=Math.max(D/2,(W/2)/a)*1.12;
+  Object.assign(ortho,{left:-half*a,right:half*a,top:half,bottom:-half}); ortho.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+const needle=document.getElementById('needle');
+function loop(){
+  requestAnimationFrame(loop);
+  if(controls) controls.update();
+  let ang=(state.terrain.north||0);
+  if(view.cam==='3d' && controls) ang += controls.getAzimuthalAngle()*180/Math.PI;
+  needle.style.transform=`rotate(${ang}deg)`;
+  renderer.render(scene,camera);
+}
+
+/* =========================================================
+   Interactions sur la scène
+   ========================================================= */
+const ray=new THREE.Raycaster(), ptr=new THREE.Vector2(), yPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+let down=null, drag=null, draw=null;
+function setPtr(e){ const r=renderer.domElement.getBoundingClientRect(); ptr.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1); ray.setFromCamera(ptr,camera); }
+function groundPoint(){ if(ground && state.terrain.elev){ const hit=ray.intersectObject(ground,false)[0]; if(hit){ const [x,z]=fromW(hit.point.x,hit.point.z); return {x,z}; } } const v=new THREE.Vector3(); if(!ray.ray.intersectPlane(yPlane,v)) return null; const [x,z]=fromW(v.x,v.z); return {x,z}; }
+function surfacePoint(){
+  const hits=ray.intersectObjects([ground,...zoneGroup.children.flatMap(g=>g.children)],false);
+  if(hits.length){ const [x,z]=fromW(hits[0].point.x,hits[0].point.z); return {x,z}; }
+  return groundPoint();
+}
+function pick(){
+  const hits=ray.intersectObjects(pickables,false).filter(h=>h.object.parent?.visible!==false);
+  for(const h of hits){ if(h.object.userData.pid) return {kind:'plant',id:h.object.userData.pid}; }
+  for(const h of hits){ if(h.object.userData.mid) return {kind:'model',id:h.object.userData.mid}; }
+  for(const h of hits){ if(h.object.userData.zid) return {kind:'zone',id:h.object.userData.zid}; }
+  return null;
+}
+const snapV=v=>{ const s=+state.terrain.snap; return s? Math.round(v/s)*s : Math.round(v*100)/100; };
+const inT=(x,z)=>[clamp(x,0,state.terrain.w),clamp(z,0,state.terrain.d)];
+const el=renderer.domElement;
+el.addEventListener('pointerdown',e=>{
+  setPtr(e); down={x:e.clientX,y:e.clientY,btn:e.button};
+  if(e.button!==0) return;
+  if(view.mode==='zone'){
+    const p=groundPoint(); if(!p) return; const [x,z]=inT(snapV(p.x),snapV(p.z));
+    draw={x0:x,z0:z,x1:x,z1:z}; el.setPointerCapture(e.pointerId); return;
+  }
+  if(view.mode==='select' && view.sel){
+    const h=pick();
+    if(h && h.id===view.sel.id){
+      const obj = h.kind==='plant'? state.plants.find(p=>p.id===h.id) : h.kind==='model'? state.models.find(m=>m.id===h.id) : state.zones.find(z=>z.id===h.id);
+      const p=groundPoint(); if(!obj||!p) return;
+      drag={obj,kind:h.kind,ox:obj.x-p.x,oz:obj.z-p.z,start:JSON.stringify(state),moved:false};
+      controls.enabled=false; el.setPointerCapture(e.pointerId);
+    }
+  }
+},{capture:true});
+el.addEventListener('pointermove',e=>{
+  setPtr(e);
+  if(draw){
+    const p=groundPoint(); if(!p) return; const [x,z]=inT(snapV(p.x),snapV(p.z)); draw.x1=x; draw.z1=z; drawPreview(); return;
+  }
+  if(drag){
+    const p=groundPoint(); if(!p) return; const [x,z]=inT(snapV(p.x+drag.ox),snapV(p.z+drag.oz));
+    drag.obj.x=x; drag.obj.z=z; drag.moved=true;
+    if(drag.kind==='plant'){ const g=plantObjs.get(drag.obj.id); placePlantGroup(drag.obj,g); }
+    else if(drag.kind==='model'){ placeModel(drag.obj); }
+    else { rebuildScene(); }
+    renderInspector(); return;
+  }
+  if(!down) hover(e);
+});
+el.addEventListener('pointerup',e=>{
+  setPtr(e);
+  const moved = down? Math.hypot(e.clientX-down.x,e.clientY-down.y) : 0;
+  if(draw){
+    const x0=Math.min(draw.x0,draw.x1), x1=Math.max(draw.x0,draw.x1), z0=Math.min(draw.z0,draw.z1), z1=Math.max(draw.z0,draw.z1);
+    clearPreview();
+    if(x1-x0>=.2 && z1-z0>=.2){
+      const t=view.modeArg; const n=state.zones.filter(z=>z.type===t).length+1;
+      const zn={id:uid(),type:t,name:`${ZT[t].n} ${n}`,x:+((x0+x1)/2).toFixed(2),z:+((z0+z1)/2).toFixed(2),w:+(x1-x0).toFixed(2),d:+(z1-z0).toFixed(2),rot:0,h:ZT[t].h};
+      commit(()=>state.zones.push(zn)); select({kind:'zone',id:zn.id});
+    }
+    draw=null; down=null; return;
+  }
+  if(drag){
+    if(drag.moved){ undoStack.push(drag.start); if(undoStack.length>40) undoStack.shift(); rebuildScene(); scheduleSave(); renderPanels(); }
+    drag=null; controls.enabled=true; applyModeToControls(); down=null; return;
+  }
+  if(down && down.btn===0 && moved<6){
+    if(view.mode==='plant'){
+      const p=surfacePoint(); if(p && p.x>=0 && p.z>=0 && p.x<=state.terrain.w && p.z<=state.terrain.d){ plantAt(view.modeArg,snapV(p.x),snapV(p.z)); }
+    } else if(view.mode==='select'){
+      select(pick());
+    }
+  }
+  down=null;
+});
+el.addEventListener('pointerleave',()=>{ tipEl.style.display='none'; });
+el.addEventListener('contextmenu',e=>e.preventDefault());
+const tipEl=document.getElementById('tip');
+function hover(e){
+  if(view.mode==='zone'){ tipEl.style.display='none'; el.style.cursor='crosshair'; return; }
+  const h=pick(); const r=stage.getBoundingClientRect();
+  if(!h){ tipEl.style.display='none'; el.style.cursor= view.mode==='plant'?'copy':'default'; return; }
+  let txt='';
+  if(h.kind==='plant'){ const p=state.plants.find(p=>p.id===h.id); const s=SP[p.sp]; const G=growth(p,view.y,view.m); txt=`${s.n} · ${G.phase}`; }
+  else if(h.kind==='model'){ const m=state.models.find(m=>m.id===h.id); txt=`${m?m.name:'Modèle'} · modèle 3D`; }
+  else { const z=state.zones.find(z=>z.id===h.id); txt=`${z.name} · ${fmt(z.w*z.d)} m²`; }
+  tipEl.textContent=txt; tipEl.style.display='block'; tipEl.style.left=(e.clientX-r.left+14)+'px'; tipEl.style.top=(e.clientY-r.top+10)+'px';
+  el.style.cursor= view.mode==='plant'?'copy': (view.sel && view.sel.id===h.id ? 'move':'pointer');
+}
+function drawPreview(){
+  clearPreview(); const t=ZT[view.modeArg];
+  const w=Math.abs(draw.x1-draw.x0), d=Math.abs(draw.z1-draw.z0); if(w<.05||d<.05) return;
+  previewMesh=new THREE.Mesh(new THREE.BoxGeometry(w,Math.max(.05,Math.min(t.h,1)),d),new THREE.MeshBasicMaterial({color:t.col,transparent:true,opacity:.55}));
+  const [wx,wz]=toW((draw.x0+draw.x1)/2,(draw.z0+draw.z1)/2); previewMesh.position.set(wx,Math.min(t.h,1)/2,wz); helpGroup.add(previewMesh);
+  tipEl.style.display='block'; tipEl.textContent=`${fmt(w,2)} × ${fmt(d,2)} m`;
+}
+function clearPreview(){ if(previewMesh){ helpGroup.remove(previewMesh); previewMesh.geometry.dispose(); previewMesh=null; } tipEl.style.display='none'; }
+
+function plantAt(spId,x,z){
+  const s=SP[spId];
+  let date;
+  const vNowIdx=vIdx(), todayIdx=Y0*12+M0-1;
+  if(s.life==='annuelle'){ const m0=(s.pl||s.se||[5])[0]; date = iso(view.m>m0+1 && !s.rcNext ? view.y+1 : view.y, m0, s.pl?1:15); if(s.id==='ail') date=iso(view.y,10,15); }
+  else date = vNowIdx>todayIdx ? iso(view.y,view.m,15) : TODAY_ISO;
+  const p={id:uid(),sp:spId,x,z,date,note:''};
+  commit(()=>state.plants.push(p));
+  toast(`${s.n} ${isPlanned(p)?'planifié pour '+MOISL[pd(date).m-1]+' '+pd(date).y:'planté'}`);
+}
+function setMode(mode,arg){
+  view.mode=mode; view.modeArg=arg||null;
+  const pill=document.getElementById('modePill');
+  pill.textContent = mode==='plant' ? `Plantation : ${SP[arg].n}` : mode==='zone' ? `Dessin : ${ZT[arg].n}` : 'Sélection';
+  applyModeToControls(); renderSpecies(); renderZoneTools(); renderInspector();
+}
+function applyModeToControls(){ if(!controls) return; controls.enabled = view.mode!=='zone'; el.style.cursor = view.mode==='zone'?'crosshair': view.mode==='plant'?'copy':'default'; }
+function select(s){
+  view.sel=s; if(s && view.mode!=='select') setMode('select');
+  updateAllPlants(); updateSelOutline(); renderInspector(); renderZoneList();
+}
+
+/* =========================================================
+   Historique, sauvegarde
+   ========================================================= */
+const undoStack=[];
+function commit(fn,opts){
+  undoStack.push(JSON.stringify(state)); if(undoStack.length>40) undoStack.shift();
+  fn(); state.example=false;
+  if(!opts||opts.scene!==false) rebuildScene();
+  scheduleSave(); renderPanels();
+}
+function undo(){
+  const s=undoStack.pop(); if(!s){ toast('Rien à annuler'); return; }
+  state=JSON.parse(s); if(view.sel && !findSel()) view.sel=null;
+  buildGround(); rebuildScene(); renderAll(); scheduleSave();
+}
+function findSel(){ if(!view.sel) return null; const k=view.sel.kind, id=view.sel.id; return k==='plant'? state.plants.find(p=>p.id===id) : k==='model'? state.models.find(m=>m.id===id) : state.zones.find(z=>z.id===id); }
+
+const LS_KEY='monterrain.plan.v1', LS_PHOTO='monterrain.photo.v1';
+let db=null, uidUser=null, saveTimer=null, saving=false, pendingSave=false, cloudOK=false, localOK=true;
+function setSave(txt,cls){ const e=document.getElementById('save'); e.className='save '+(cls||''); e.querySelector('span').textContent=txt; }
+function scheduleSave(){ setSave('Modifications non enregistrées','warn'); clearTimeout(saveTimer); saveTimer=setTimeout(saveNow,900); }
+async function saveNow(){
+  if(saving){ pendingSave=true; return; }
+  saving=true; state.updatedAt=Date.now(); const json=JSON.stringify(state);
+  try{ localStorage.setItem(LS_KEY,json); localOK=true; }catch(e){ localOK=false; }
+  if(db && uidUser){
+    try{ await db.doc(`data/users/${uidUser}/plan`).set({json,updatedAt:state.updatedAt}); cloudOK=true; setSave('Enregistré dans ton compte','ok'); }
+    catch(e){ cloudOK=false; setSave(e&&e.code==='quota_exceeded'?'Espace plein — exporte une copie':(localOK?'Enregistré sur cet appareil':'Non enregistré — exporte une copie'),'warn'); }
+  } else setSave(localOK?'Enregistré sur cet appareil':'Non enregistré — exporte une copie', localOK?'ok':'warn');
+  saving=false; renderSaveHint();
+  if(pendingSave){ pendingSave=false; saveNow(); }
+}
+async function savePhoto(){
+  try{ photo? localStorage.setItem(LS_PHOTO,photo) : localStorage.removeItem(LS_PHOTO); }catch(e){}
+  if(db && uidUser){ try{ const ref=db.doc(`data/users/${uidUser}/photo`); photo? await ref.set({data:photo}) : await ref.delete(); }catch(e){ toast('La photo n\'a pas pu être enregistrée dans ton compte (trop lourde).'); } }
+}
+function renderSaveHint(){
+  document.getElementById('saveHint').textContent = cloudOK
+    ? 'Ton plan est enregistré automatiquement dans ton compte Claude et te suit sur tous tes appareils. Exporte une copie de temps en temps pour garder une sauvegarde.'
+    : 'Ton plan est enregistré automatiquement dans ce navigateur. Exporte une copie pour le garder en lieu sûr ou le transférer sur un autre appareil.';
+}
+function loadLocal(){
+  try{ const j=localStorage.getItem(LS_KEY); if(j){ const s=JSON.parse(j); if(s && Array.isArray(s.plants)) state=migrate(s); } photo=localStorage.getItem(LS_PHOTO)||null; }catch(e){ localOK=false; }
+}
+async function initCloud(){
+  if(!window.claude || typeof window.claude.use!=='function'){ setSave(localOK?'Enregistré sur cet appareil':'Non enregistré', localOK?'ok':'warn'); renderSaveHint(); return; }
+  try{
+    const [d,u,a]=await Promise.all([window.claude.use('db'),window.claude.use('user'),window.claude.use('assets').catch(()=>null)]);
+    assetsCap=a||null; if(currentTab==='jour') renderJournal();
+    if(!d||!u){ setSave(localOK?'Enregistré sur cet appareil':'Non enregistré','ok'); renderSaveHint(); return; }
+    const id=await u.id(); if(!id){ renderSaveHint(); return; }
+    db=d; uidUser=id;
+    const timer=setTimeout(()=>setSave('Compte injoignable — enregistré sur cet appareil','warn'),10000);
+    const snap=await db.doc(`data/users/${id}/plan`).get(); clearTimeout(timer);
+    if(snap.exists){
+      const data=snap.data(); const remote=JSON.parse(data.json);
+      if(remote && Array.isArray(remote.plants) && !remote.example && (remote.updatedAt||0) > (state.updatedAt||0)){ state=migrate(remote); buildGround(); rebuildScene(); renderAll(); }
+      else if((state.updatedAt||0) > (remote.updatedAt||0)) saveNow();
+    } else if(!state.example) saveNow();
+    try{ const ps=await db.doc(`data/users/${id}/photo`).get(); if(ps.exists){ photo=ps.data().data; applyPhoto(); } }catch(e){}
+    cloudOK=true; setSave('Enregistré dans ton compte','ok'); renderSaveHint();
+  }catch(e){ setSave(localOK?'Enregistré sur cet appareil':'Non enregistré','warn'); renderSaveHint(); }
+}
+
+/* =========================================================
+   Interface — panneaux
+   ========================================================= */
+const $=s=>document.querySelector(s);
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.style.display='block'; clearTimeout(toast._t); toast._t=setTimeout(()=>t.style.display='none',2600); }
+function modal(html,onMount){ const m=$('#modal'); $('#mbox').innerHTML=html; m.classList.add('on'); onMount&&onMount($('#mbox')); }
+function closeModal(){ $('#modal').classList.remove('on'); }
+function ask(title,msg,ok='Confirmer'){ return new Promise(res=>{ modal(`<h2 style="font-size:17px">${esc(title)}</h2><p class="hint" style="font-size:13.5px">${esc(msg)}</p><div class="row" style="justify-content:flex-end"><button class="btn" data-a="0">Annuler</button><button class="btn primary" data-a="1">${esc(ok)}</button></div>`, b=>b.querySelectorAll('[data-a]').forEach(x=>x.onclick=()=>{closeModal();res(x.dataset.a==='1');})); }); }
+
+function renderHeader(){
+  $('#tName').textContent=state.terrain.name;
+  const yr=$('#yr'); yr.min=Y0-1; yr.max=Y0+20; yr.value=view.y; $('#mo').value=view.m; $('#hr').value=view.h;
+  const diff=view.y-Y0; const rel = diff===0?'cette année': diff>0? `dans ${diff} an${diff>1?'s':''}` : `il y a ${-diff} an${diff<-1?'s':''}`;
+  $('#when').innerHTML=`<span style="text-transform:capitalize">${MOISL[view.m-1]}</span> <span class="num">${view.y}</span><small>${rel} · ${String(Math.floor(view.h)).padStart(2,'0')} h ${view.h%1?'30':'00'}</small>`;
+}
+function setTime(y,m,h){
+  if(y!=null) view.y=clamp(y,Y0-1,Y0+20); if(m!=null) view.m=m; if(h!=null) view.h=h;
+  renderHeader(); updateAllPlants(); updateSun(); renderInspector();
+  if(currentTab==='proj') renderProjections();
+}
+
+// Végétaux
+function renderCatChips(){
+  $('#catChips').innerHTML=[['',`Toutes (${SPECIES.length})`],...Object.entries(CAT)].map(([k,v])=>`<button class="chip" data-cat="${k}" aria-pressed="${(view.cat||'')===k}">${v}</button>`).join('');
+  $('#catChips').querySelectorAll('button').forEach(b=>b.onclick=()=>{view.cat=b.dataset.cat||null;renderCatChips();renderSpecies();});
+}
+function renderSpecies(){
+  const q=view.q.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'');
+  const list=SPECIES.filter(s=>(!view.cat||s.cat===view.cat) && (!q || (s.n+' '+s.lat+' '+s.fam).toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'').includes(q)));
+  const counts={}; state.plants.forEach(p=>counts[p.sp]=(counts[p.sp]||0)+1);
+  $('#splist').innerHTML=list.map(s=>`<button class="sp" data-sp="${s.id}" aria-pressed="${view.mode==='plant'&&view.modeArg===s.id}">
+    <i class="sw" style="background:${s.fl?s.fl[0]:s.col};box-shadow:inset 0 0 0 3px ${s.col}"></i>
+    <span><b>${esc(s.n)}${counts[s.id]?` <span class="badge num">${counts[s.id]}</span>`:''}</b><em>${esc(s.lat)}</em></span>
+    <span class="dim num">${fmt(s.h)}×${fmt(s.w)} m<br>${s.life==='annuelle'?'annuelle':'zone '+s.zone}</span></button>`).join('') || '<p class="hint">Aucune plante ne correspond.</p>';
+  $('#splist').querySelectorAll('.sp').forEach(b=>b.onclick=()=>{ const id=b.dataset.sp; if(view.mode==='plant'&&view.modeArg===id) setMode('select'); else { view.sel=null; updateAllPlants(); updateSelOutline(); setMode('plant',id);} });
+}
+// Zones
+function renderZoneTools(){
+  $('#ztools').innerHTML=Object.entries(ZT).map(([k,t])=>`<button class="ztool" data-z="${k}" aria-pressed="${view.mode==='zone'&&view.modeArg===k}"><i class="sw" style="background:${t.border||t.col}"></i>${t.n}</button>`).join('');
+  $('#ztools').querySelectorAll('.ztool').forEach(b=>b.onclick=()=>{ const k=b.dataset.z; if(view.mode==='zone'&&view.modeArg===k) setMode('select'); else { view.sel=null; updateSelOutline(); setMode('zone',k);} });
+}
+function renderZoneList(){
+  $('#zlist').innerHTML=state.zones.map(z=>`<button class="li" data-id="${z.id}" style="${view.sel?.id===z.id?'color:var(--accent);font-weight:600':''}"><span>${esc(z.name)}</span><span class="num">${fmt(z.w*z.d)} m²</span></button>`).join('') || '<p class="hint">Aucune zone pour l\'instant.</p>';
+  $('#zlist').querySelectorAll('.li').forEach(b=>b.onclick=()=>select({kind:'zone',id:b.dataset.id}));
+}
+
+// Calendrier
+function renderCalendar(){
+  const Y=view.calY??view.y; $('#calY').textContent=Y;
+  $('#kindChips').innerHTML=Object.entries(KINDS).map(([k,v])=>`<button class="chip k-${k}" data-k="${k}" aria-pressed="${view.kinds.has(k)}">${v}</button>`).join('');
+  $('#kindChips').querySelectorAll('button').forEach(b=>b.onclick=()=>{const k=b.dataset.k; view.kinds.has(k)?view.kinds.delete(k):view.kinds.add(k); renderCalendar();});
+  const tasks=tasksFor(Y).filter(t=>view.kinds.has(t.kind));
+  const [f1m,f1d]=(state.terrain.frost1||'05-20').split('-').map(Number), [f2m,f2d]=(state.terrain.frost2||'09-25').split('-').map(Number);
+  let html='';
+  for(let m=1;m<=12;m++){
+    const mt=tasks.filter(t=>t.m===m); const isNow=Y===Y0&&m===M0;
+    const doneN=mt.filter(t=>t.custom? t.custom.done : state.done[t.key]).length;
+    const frost = (m===f1m?`<div class="task"><span></span><span class="tt">Dernier gel moyen vers le ${f1d} ${MOISL[m-1]} : sortir les semis tendres après cette date</span><span class="kind k-info">Climat</span></div>`:'')+(m===f2m?`<div class="task"><span></span><span class="tt">Premier gel moyen vers le ${f2d} ${MOISL[m-1]} : protéger ou récolter les cultures sensibles</span><span class="kind k-info">Climat</span></div>`:'');
+    if(!mt.length && !frost && !isNow) { html+=`<div class="month"><button class="mhead" data-m="${m}"><b>${MOISL[m-1]}</b><span>rien de prévu</span></button></div>`; continue; }
+    html+=`<div class="month ${isNow?'now':''}"><button class="mhead" data-m="${m}"><b>${MOISL[m-1]}${isNow?' · ce mois-ci':''}</b><span class="num">${doneN}/${mt.length} faites</span></button><div class="tasks">${frost}${mt.map(t=>{
+      const done=t.custom? t.custom.done : !!state.done[t.key];
+      return `<label class="task ${done?'done':''}"><input type="checkbox" data-key="${esc(t.key)}" ${done?'checked':''}><span class="tt">${esc(t.title)}${t.n>1?` <span class="num">(×${t.n})</span>`:''}${t.custom?`<small>le ${t.day} ${MOISL[m-1]} · <a href="#" data-del="${t.custom.id}">supprimer</a></small>`:''}</span><span class="kind k-${t.kind}">${KINDS[t.kind]}</span></label>`;}).join('')}</div></div>`;
+  }
+  $('#months').innerHTML=html;
+  $('#months').querySelectorAll('input[type=checkbox]').forEach(cb=>cb.onchange=()=>{
+    const k=cb.dataset.key;
+    commit(()=>{ if(k.startsWith('c|')){ const t=state.tasks.find(t=>t.id===k.slice(2)); if(t) t.done=cb.checked; } else { if(cb.checked) state.done[k]=1; else delete state.done[k]; } },{scene:false});
+  });
+  $('#months').querySelectorAll('[data-del]').forEach(a=>a.onclick=e=>{e.preventDefault(); const id=a.dataset.del; commit(()=>state.tasks=state.tasks.filter(t=>t.id!==id),{scene:false});});
+  $('#months').querySelectorAll('.mhead').forEach(b=>b.onclick=()=>setTime(Y,+b.dataset.m));
+}
+
+// Projections
+const ctip=$('#ctip');
+function barChart(elm,title,data,unit,cur,onPick,digits=0){
+  const W=330,H=130,pl=34,pb=18,pt=8; const max=Math.max(1,...data.map(d=>d.v)); const nice=niceMax(max);
+  const bw=(W-pl)/data.length; const y=v=>pt+(H-pt-pb)*(1-v/nice);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">`;
+  [0,.5,1].forEach(t=>{ const v=nice*t; s+=`<line x1="${pl}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${pl-5}" y="${y(v)+3.5}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="IBM Plex Mono">${fmt(v,digits)}</text>`; });
+  data.forEach((d,i)=>{
+    const x=pl+i*bw+bw*.18, w=bw*.64, top=y(d.v), h=Math.max(0,H-pb-top);
+    const r=Math.min(4,w/2,h);
+    const path = h>0 ? `M${x},${H-pb} L${x},${top+r} Q${x},${top} ${x+r},${top} L${x+w-r},${top} Q${x+w},${top} ${x+w},${top+r} L${x+w},${H-pb} Z` : '';
+    s+=`<g data-i="${i}" style="cursor:pointer"><rect x="${pl+i*bw}" y="${pt}" width="${bw}" height="${H-pt}" fill="transparent"/>${path?`<path d="${path}" fill="var(--accent)" opacity="${d.y===cur?1:.55}"/>`:''}</g>`;
+    if(i%2===0||data.length<9) s+=`<text x="${pl+i*bw+bw/2}" y="${H-5}" text-anchor="middle" font-size="9.5" fill="${d.y===cur?'var(--ink)':'var(--muted)'}" font-family="IBM Plex Mono">${String(d.y).slice(2)}</text>`;
+  });
+  s+=`<line x1="${pl}" x2="${W}" y1="${H-pb}" y2="${H-pb}" stroke="var(--muted)" stroke-width="1"/></svg>`;
+  elm.innerHTML=`<div class="ct">${esc(title)}</div>${s}`;
+  elm.querySelectorAll('g[data-i]').forEach(g=>{ const d=data[+g.dataset.i];
+    g.onmousemove=e=>{ ctip.style.display='block'; ctip.style.left=(e.clientX+12)+'px'; ctip.style.top=(e.clientY-30)+'px'; ctip.textContent=`${d.y} : ${fmt(d.v,digits)} ${unit}`; };
+    g.onmouseleave=()=>ctip.style.display='none'; g.onclick=()=>onPick(d.y); });
+}
+function niceMax(v){ const p=Math.pow(10,Math.floor(Math.log10(v))); const n=v/p; return (n<=1?1:n<=2?2:n<=5?5:10)*p; }
+function projData(){
+  const area=lotsArea(); const rows=[];
+  for(let Y=Y0;Y<=Y0+15;Y++){
+    let kg=0, kgP=0, cover=0, inGround=0;
+    for(const p of state.plants){ const s=SP[p.sp]; if(!s) continue; const yv=yieldAt(p,Y); kg+=yv; if(s.life!=='annuelle') kgP+=yv;
+      if(s.life!=='annuelle'){ const a=ageAt(p,Y,7); if(a>=0){ inGround++; const r=PW(p)*baseGrowth(s,a)/2; cover+=Math.PI*r*r; } }
+      else { const d=pd(p.date); if(d.y===Y) inGround++; } }
+    const tasks=tasksFor(Y).reduce((a,t)=>a+1,0);
+    rows.push({y:Y,kg,kgP,cover:Math.min(100,cover/area*100),inGround,tasks});
+  }
+  return rows;
+}
+function conflicts(){
+  const out=[]; const per=state.plants.filter(p=>SP[p.sp] && SP[p.sp].life!=='annuelle');
+  const big=per.filter(p=>PW(p)>=1);
+  for(let i=0;i<big.length;i++) for(let j=0;j<per.length;j++){
+    const a=big[i], b=per[j]; if(a===b || ((a.lidar||a.sp==='haie-ex') && (b.lidar||b.sp==='haie-ex'))) continue; const sa=SP[a.sp], sb=SP[b.sp];
+    if(PW(b)>=1 && j<=big.indexOf(b) && big.indexOf(b)<=i && big.indexOf(b)!==-1) continue;
+    if(a.sp===b.sp && (sa.cat==='haie'||sa.sp<PW(a))) continue;
+    const dist=Math.hypot(a.x-b.x,a.z-b.z); const need=(PW(a)+PW(b))/2*.85; if(dist>=need) continue;
+    let yr=null; for(let Y=Math.max(Y0,pd(a.date).y,pd(b.date).y);Y<=Y0+40;Y++){ const ra=PW(a)*baseGrowth(sa,Math.max(0,ageAt(a,Y,7)))/2, rb=PW(b)*baseGrowth(sb,Math.max(0,ageAt(b,Y,7)))/2; if(ra+rb>dist/.85){yr=Y;break;} }
+    if(yr!=null && PW(b)<1 && sb.life==='vivace' && sa.life==='ligneux'){
+      out.push({yr,lvl:yr<=Y0+2?'high':'',p:a,txt:`${sa.n} couvrira ${sb.n} vers ${yr}`,sub:`à ${fmt(dist)} m l'un de l'autre ; envergure adulte ${fmt(PW(a))} m. Ombre croissante pour la vivace.`});
+    } else if(yr!=null && PW(b)>=1){
+      out.push({yr,lvl:yr<=Y0+2?'high':'',p:a,txt:`${sa.n} et ${sb.n} se toucheront vers ${yr}`,sub:`${fmt(dist)} m entre les deux ; il faudrait environ ${fmt(need/.85)} m.`});
+    }
+  }
+  // près des bâtiments
+  for(const p of per){ const s=SP[p.sp]; if(PW(p)<3 || p.lidar) continue;
+    for(const z of state.zones.filter(z=>z.type==='batiment')){
+      const dx=Math.max(Math.abs(p.x-z.x)-z.w/2,0), dz=Math.max(Math.abs(p.z-z.z)-z.d/2,0); const dist=Math.hypot(dx,dz);
+      if(dist < PW(p)/2*.9){ let yr=null; for(let Y=Math.max(Y0,pd(p.date).y);Y<=Y0+50;Y++){ if(PW(p)*baseGrowth(s,Math.max(0,ageAt(p,Y,7)))/2>dist){yr=Y;break;} }
+        out.push({yr:yr??Y0,lvl:'high',p,txt:`${s.n} touchera ${z.name} vers ${yr??Y0}`,sub:`à ${fmt(dist)} m du mur ; rayon adulte ${fmt(PW(p)/2)} m.`}); }
+    }
+  }
+  // rotation des cultures
+  const ann=state.plants.filter(p=>SP[p.sp]?.life==='annuelle');
+  const byZoneYear={};
+  for(const p of ann){ const z=zoneOfPlant(p); if(!z) continue; const y=pd(p.date).y; const k=z.id+'|'+y; (byZoneYear[k]=byZoneYear[k]||new Set()).add(SP[p.sp].fam); }
+  const seen=new Set();
+  for(const p of ann){ const z=zoneOfPlant(p); if(!z) continue; const y=pd(p.date).y; const fam=SP[p.sp].fam; const prev=byZoneYear[z.id+'|'+(y-1)];
+    const key=z.id+y+fam; if(prev && prev.has(fam) && !seen.has(key) && y>=Y0){ seen.add(key); out.push({yr:y,lvl:'',p,txt:`Rotation : ${fam} deux ans de suite dans ${z.name}`,sub:`${SP[p.sp].n} en ${y} après une culture de la même famille en ${y-1}. Change de bac pour limiter maladies et épuisement du sol.`}); } }
+  // rusticité
+  const zr=ZONES_RUST.indexOf(state.terrain.zone); const zoneNum=parseInt(state.terrain.zone);
+  const seenR=new Set();
+  for(const p of per){ const s=SP[p.sp]; if(s.zone>zoneNum && !seenR.has(s.id)){ seenR.add(s.id); out.push({yr:pd(p.date).y,lvl:'high',p,txt:`${s.n} est rustique en zone ${s.zone} et plus`,sub:`Ton terrain est en zone ${state.terrain.zone} : choisis un emplacement abrité ou protège-le l'hiver.`}); } }
+  const uniq=[]; const k2=new Set(); for(const o of out){ const k=o.txt; if(!k2.has(k)){k2.add(k);uniq.push(o);} }
+  return uniq.sort((a,b)=>a.yr-b.yr).slice(0,14);
+}
+function renderProjections(){
+  const rows=projData();
+  barChart($('#chYield'),'Récolte estimée des plantes vivaces, petits fruits et fruitiers (kg par année)',rows.map(r=>({y:r.y,v:r.kgP})),'kg',view.y,y=>setTime(y,null));
+  barChart($('#chCover'),'Couverture végétale permanente (% du terrain, en juillet)',rows.map(r=>({y:r.y,v:r.cover})),'%',view.y,y=>setTime(y,null));
+  $('#projTbl').innerHTML=`<thead><tr><th>Année</th><th>Plantes</th><th>Vivaces</th><th>Total*</th><th>Couvert</th><th>Tâches</th></tr></thead><tbody>${rows.map(r=>`<tr data-y="${r.y}" class="${r.y===view.y?'cur':''}"><td>${r.y}</td><td>${r.inGround}</td><td>${fmt(r.kgP,0)} kg</td><td>${fmt(r.kg,0)} kg</td><td>${fmt(r.cover,0)} %</td><td>${r.tasks}</td></tr>`).join('')}</tbody>`;
+  $('#projTbl').querySelectorAll('tr[data-y]').forEach(tr=>tr.onclick=()=>setTime(+tr.dataset.y,null));
+  const al=conflicts();
+  $('#alerts').innerHTML=al.length? al.map((a,i)=>`<button class="alert ${a.lvl}" data-i="${i}"><span>${esc(a.txt)}<small>${esc(a.sub)}</small></span></button>`).join('') : '<p class="hint">Aucun conflit prévu : espacements, rotation et rusticité sont cohérents.</p>';
+  $('#alerts').querySelectorAll('.alert').forEach(b=>b.onclick=()=>{ const a=al[+b.dataset.i]; setTime(Math.max(a.yr,Y0),7); select({kind:'plant',id:a.p.id}); });
+  const planned=state.plants.filter(isPlanned).sort((a,b)=>a.date.localeCompare(b.date));
+  const grp={}; planned.forEach(p=>{ const k=p.date.slice(0,7)+'|'+p.sp; (grp[k]=grp[k]||[]).push(p); });
+  $('#planned').innerHTML=Object.entries(grp).map(([k,ps])=>{ const d=pd(ps[0].date); return `<button class="li" data-id="${ps[0].id}"><span>${esc(SP[ps[0].sp].n)}${ps.length>1?` <span class="num">×${ps.length}</span>`:''}</span><span>${MOIS[d.m-1]} ${d.y}</span></button>`;}).join('') || '<p class="hint">Aucune plantation future. Avance le curseur Année puis plante : les nouvelles plantes seront datées de ce moment.</p>';
+  $('#planned').querySelectorAll('.li').forEach(b=>b.onclick=()=>{ const p=state.plants.find(p=>p.id===b.dataset.id); const d=pd(p.date); setTime(d.y,Math.min(12,d.m+1)); select({kind:'plant',id:p.id}); });
+  $('#carryY').textContent=view.y; $('#carryY2').textContent=view.y+1;
+}
+
+// Récoltes
+function renderHarvests(){
+  const withRc=SPECIES.filter(s=>s.rc && state.plants.some(p=>p.sp===s.id));
+  const others=SPECIES.filter(s=>s.rc && !withRc.includes(s));
+  const sel=$('#rSp'); const cur=sel.value;
+  sel.innerHTML=`<optgroup label="Sur ton terrain">${withRc.map(s=>`<option value="${s.id}">${esc(s.n)}</option>`).join('')}</optgroup><optgroup label="Autres">${others.map(s=>`<option value="${s.id}">${esc(s.n)}</option>`).join('')}</optgroup>`;
+  if(cur) sel.value=cur;
+  if(!$('#rDate').value) $('#rDate').value=TODAY_ISO;
+  const years=[...new Set(state.harvests.map(h=>pd(h.date).y))].sort((a,b)=>b-a);
+  const Y=years[0]??Y0;
+  const tot={}; state.harvests.filter(h=>pd(h.date).y===Y && h.unit==='kg').forEach(h=>tot[h.sp]=(tot[h.sp]||0)+ +h.qty);
+  const est={}; state.plants.forEach(p=>{ const v=yieldAt(p,Y); if(v) est[p.sp]=(est[p.sp]||0)+v; });
+  const keys=[...new Set([...Object.keys(tot),...Object.keys(est)])].filter(k=>SP[k]).sort((a,b)=>(tot[b]||0)-(tot[a]||0));
+  $('#recSum').innerHTML = keys.length? `<h3 style="font-size:14px;margin-bottom:6px">Bilan ${Y} : récolté et estimé</h3><table class="tbl"><thead><tr><th>Culture</th><th>Récolté</th><th>Estimé</th></tr></thead><tbody>${keys.map(k=>`<tr><td style="font-family:var(--body)">${esc(SP[k].n)}</td><td>${tot[k]?fmt(tot[k])+' kg':'—'}</td><td>${est[k]?fmt(est[k],0)+' kg':'—'}</td></tr>`).join('')}</tbody></table>` : '';
+  $('#recList').innerHTML = state.harvests.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(h=>`<div class="li"><span>${esc(SP[h.sp]?.n||h.sp)} · <span class="num">${fmt(h.qty,2)} ${esc(h.unit)}</span>${h.note?`<small style="display:block;color:var(--muted)">${esc(h.note)}</small>`:''}</span><span class="num">${h.date} <button class="btn sm danger" data-del="${h.id}" aria-label="Supprimer">×</button></span></div>`).join('') || '<p class="hint">Aucune récolte notée.</p>';
+  $('#recList').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>commit(()=>state.harvests=state.harvests.filter(h=>h.id!==b.dataset.del),{scene:false}));
+}
+
+// Terrain
+function renderTerrainForm(){
+  const t=state.terrain;
+  $('#fName').value=t.name; $('#fW').value=t.w; $('#fD').value=t.d; $('#fLat').value=t.lat; $('#fNorth').value=t.north||0;
+  $('#fZone').innerHTML=ZONES_RUST.map(z=>`<option ${z===t.zone?'selected':''}>${z}</option>`).join('');
+  $('#fSnap').value=String(t.snap); $('#fFrost1').value=t.frost1; $('#fFrost2').value=t.frost2; $('#fOp').value=t.photoOp;
+  renderSaveHint();
+}
+
+// Fiche (panneau de droite)
+function renderInspector(){
+  const R=$('#right');
+  if(view.mode==='plant'){ R.innerHTML=speciesSheet(SP[view.modeArg])+`<div class="banner" style="margin-top:12px">Clique sur le terrain pour planter. Date automatique : ${SP[view.modeArg].life==='annuelle'?'mois de plantation habituel de la saison affichée':'le moment affiché en haut (une date future crée une plantation planifiée)'}.<br><button class="btn sm" style="margin-top:8px" id="stopPl">Arrêter de planter</button></div>`; $('#stopPl').onclick=()=>setMode('select'); return; }
+  if(view.mode==='zone'){ R.innerHTML=`<h2>${ZT[view.modeArg].n}</h2><p class="hint">Glisse sur le terrain pour dessiner la zone. Aimantation : ${state.terrain.snap?fmt(state.terrain.snap,2)+' m':'aucune'}.</p><button class="btn sm" style="margin-top:8px" id="stopZ">Arrêter de dessiner</button>`; $('#stopZ').onclick=()=>setMode('select'); return; }
+  const it=findSel();
+  if(!it){ R.innerHTML=summary(); bindSummary(); return; }
+  if(view.sel.kind==='plant'){ plantSheet(it); addStrip('plant:'+it.id); }
+  else if(view.sel.kind==='model') modelSheet(it);
+  else { zoneSheet(it); addStrip('zone:'+it.id); }
+}
+function addStrip(ref){ const host=document.createElement('div'); host.innerHTML=mediaStripHtml(ref); const st=$('#right .stack'); if(!st) return; st.insertBefore(host.firstElementChild, st.children[2]||null); bindMediaStrip(ref); }
+function speciesSheet(s){
+  const months=(a)=>a&&a.length?a.map(m=>MOIS[m-1]).join(', '):'—';
+  return `<h2>${esc(s.n)}</h2><p class="latin">${esc(s.lat)} · ${esc(s.fam)}</p>
+  <dl class="facts"><dt>Catégorie</dt><dd>${CAT[s.cat]}</dd><dt>Cycle</dt><dd>${s.life==='ligneux'?'ligneux (arbre, arbuste)':s.life}</dd>
+  <dt>Taille adulte</dt><dd class="num">${fmt(s.h)} m × ${fmt(s.w)} m</dd>${s.life!=='annuelle'?`<dt>Maturité</dt><dd class="num">${s.yrs} ans</dd><dt>Rusticité</dt><dd>zone ${s.zone}</dd>`:''}
+  <dt>Exposition</dt><dd>${s.sun}</dd><dt>Espacement</dt><dd class="num">${fmt(s.sp,2)} m</dd>
+  ${s.si?`<dt>Semis int.</dt><dd>${months(s.si)}</dd>`:''}${s.se?`<dt>Semis ext.</dt><dd>${months(s.se)}</dd>`:''}${s.pl?`<dt>Plantation</dt><dd>${months(s.pl)}</dd>`:''}
+  ${s.rc?`<dt>Récolte</dt><dd>${months(s.rc)}${s.rcNext?' (l\'année suivante)':''}</dd>`:''}${s.yld?`<dt>Rendement</dt><dd class="num">≈ ${fmt(s.yld,2)} kg/plant/an${s.life!=='annuelle'?' à maturité':''}</dd>`:''}
+  ${s.fl?`<dt>Floraison</dt><dd>${months(s.fl[1])}</dd>`:''}</dl>
+  ${s.care.length?`<p style="margin:0 0 4px;font-size:12px;color:var(--muted)">Entretien</p><ul style="margin:0;padding-left:18px;font-size:13px">${s.care.map(([m,k,t])=>`<li>${esc(t)} <span class="hint">(${months(m)})</span></li>`).join('')}</ul>`:''}
+  ${s.note?`<p class="banner" style="margin-top:10px">${esc(s.note)}</p>`:''}`;
+}
+function plantSheet(p){
+  const s=SP[p.sp], G=growth(p,view.y,view.m), age=ageAt(p,view.y,view.m), z=zoneOfPlant(p);
+  const f=G.vis?G.f:0;
+  const next=[]; for(let k=0;k<14 && next.length<4;k++){ const idx=Y0*12+M0-1+k, Y=Math.floor(idx/12), m=idx%12+1; tasksFor(Y).filter(t=>t.m===m && t.sp===s.id).forEach(t=>{ if(next.length<4) next.push(`${MOIS[m-1]} ${Y} · ${t.title.split(' — ')[0]}`); }); }
+  const same=state.plants.filter(q=>q.sp===p.sp).length;
+  $('#right').innerHTML=`<div class="stack">
+    <div><span class="badge ${isPlanned(p)?'plan':''}">${isPlanned(p)?'Planifié':'En place'}</span> <span class="badge">${G.vis?G.phase:'Hors saison'}</span></div>
+    <div><h2>${esc(s.n)}</h2><p class="latin">${esc(s.lat)} · ${esc(s.fam)}</p></div>
+    <div class="bigstats"><div class="stat"><b>${G.vis?fmt(PH(p)*f)+' m':'—'}</b><span>hauteur en ${MOIS[view.m-1]} ${view.y}</span></div><div class="stat"><b>${age>=0?fmt(age,1)+' an'+(age>=2?'s':''):'—'}</b><span>âge à cette date</span></div>
+    <div class="stat"><b>${fmt(PW(p))} m</b><span>${p.lidar?'envergure estimée':'envergure adulte'}</span></div><div class="stat"><b>${fmt(yieldAt(p,view.y),1)} kg</b><span>récolte estimée ${view.y}</span></div></div>
+    <div class="field"><label for="iDate">Date de plantation</label><input id="iDate" type="date" value="${p.date}"></div>
+    <div class="row"><div class="field"><label for="iX">Position x (m)</label><input id="iX" type="number" step="0.1" value="${p.x}"></div><div class="field"><label for="iZ">Position y (m)</label><input id="iZ" type="number" step="0.1" value="${p.z}"></div></div>
+    <p class="hint">${z?`Dans : <b>${esc(z.name)}</b>. `:''}Astuce : glisse la plante sur le terrain pour la déplacer.</p>
+    <div class="field"><label for="iNote">Notes (variété, fournisseur, observations)</label><textarea id="iNote" rows="3">${esc(p.note||'')}</textarea></div>
+    ${next.length?`<div><p style="margin:0 0 4px;font-size:12px;color:var(--muted)">Prochaines tâches</p><ul style="margin:0;padding-left:18px;font-size:13px">${next.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div>`:''}
+    <div class="row"><button class="btn" id="iDup">Dupliquer à côté</button><button class="btn danger" id="iDel">Supprimer</button>${same>1?`<button class="btn danger" id="iDelAll">Supprimer les ${same} ${esc(s.n.toLowerCase())}</button>`:''}</div>
+    <details><summary style="cursor:pointer;font-size:13px">Fiche de l'espèce</summary><div style="margin-top:8px">${speciesSheet(s)}</div></details></div>`;
+  $('#iDate').onchange=e=>{ if(e.target.value) commit(()=>p.date=e.target.value); };
+  $('#iX').onchange=e=>commit(()=>p.x=clamp(+e.target.value,0,state.terrain.w));
+  $('#iZ').onchange=e=>commit(()=>p.z=clamp(+e.target.value,0,state.terrain.d));
+  $('#iNote').onchange=e=>commit(()=>p.note=e.target.value,{scene:false});
+  $('#iDup').onclick=()=>{ const step=Math.max(.2,s.sp||s.w); const q={...p,id:uid(),x:clamp(p.x+step,0,state.terrain.w)}; commit(()=>state.plants.push(q)); select({kind:'plant',id:q.id}); };
+  $('#iDel').onclick=()=>{ commit(()=>state.plants=state.plants.filter(q=>q.id!==p.id)); select(null); };
+  const da=$('#iDelAll'); if(da) da.onclick=async()=>{ if(await ask('Supprimer toutes ces plantes ?',`Les ${same} plants de ${s.n} seront retirés du plan.`,'Supprimer')){ commit(()=>state.plants=state.plants.filter(q=>q.sp!==p.sp)); select(null);} };
+}
+function plantsInZone(z){ return state.plants.filter(p=>{ const zz=zoneOfPlant(p); return zz&&zz.id===z.id; }); }
+function zoneSheet(z){
+  const t=ZT[z.type]; const inside=plantsInZone(z); const cnt={}; inside.forEach(p=>{const k=p.sp+'|'+pd(p.date).y; cnt[k]=(cnt[k]||0)+1;});
+  const canFill = !['batiment','bassin','compost'].includes(z.type);
+  const suggestions = z.type==='potager'? SPECIES.filter(s=>s.life==='annuelle'||s.cat==='aro') : SPECIES;
+  $('#right').innerHTML=`<div class="stack">
+    <div><span class="badge">${t.n}</span></div>
+    <div class="field"><label for="zName">Nom</label><input id="zName" value="${esc(z.name)}"></div>
+    <div class="row"><div class="field"><label for="zW">Largeur (m)</label><input id="zW" type="number" step="0.1" min="0.2" value="${z.w}"></div><div class="field"><label for="zD">Profondeur (m)</label><input id="zD" type="number" step="0.1" min="0.2" value="${z.d}"></div></div>
+    <div class="row"><div class="field"><label for="zH">Hauteur (m)</label><input id="zH" type="number" step="0.05" min="0" value="${z.h??t.h}"></div><div class="field"><label for="zR">Angle (°)</label><input id="zR" type="number" step="5" value="${z.rot||0}"></div></div>
+    <div class="row"><div class="field"><label for="zX">Centre x (m)</label><input id="zX" type="number" step="0.1" value="${z.x}"></div><div class="field"><label for="zZ">Centre y (m)</label><input id="zZ" type="number" step="0.1" value="${z.z}"></div></div>
+    <div class="field"><label for="zCol">Couleur</label><input id="zCol" type="color" value="${z.color||t.border||t.col}"></div>
+    <p class="hint num">Surface : ${fmt(z.w*z.d,1)} m² · périmètre ${fmt(2*(z.w+z.d),1)} m</p>
+    ${canFill?`<div class="banner"><b>Remplir selon l'espacement</b><div class="row" style="margin-top:6px"><div class="field"><label for="fillSp">Plante</label><select id="fillSp">${suggestions.map(s=>`<option value="${s.id}">${esc(s.n)} (${fmt(s.sp,2)} m)</option>`).join('')}</select></div><div class="field"><label for="fillDate">Date</label><input id="fillDate" type="date" value="${iso(view.y,5,20)}"></div></div><button class="btn primary" id="fillBtn" style="margin-top:8px">Remplir la zone</button></div>`:''}
+    ${inside.length?`<div><p style="margin:0 0 4px;font-size:12px;color:var(--muted)">Plantes dans cette zone</p><div class="list">${Object.entries(cnt).map(([k,n])=>{const [sp,y]=k.split('|');return `<div class="li"><span>${esc(SP[sp].n)} <span class="num">×${n}</span></span><span class="num">${y}</span></div>`;}).join('')}</div></div>`:''}
+    <div class="field"><label for="zNote">Notes</label><textarea id="zNote" rows="2">${esc(z.note||'')}</textarea></div>
+    <div class="row"><button class="btn" id="zDup">Dupliquer</button><button class="btn danger" id="zDel">Supprimer la zone</button></div></div>`;
+  const num=(id,key,min)=>$(id).onchange=e=>{ const v=+e.target.value; if(isFinite(v)) commit(()=>z[key]=min!=null?Math.max(min,v):v); };
+  $('#zName').onchange=e=>commit(()=>z.name=e.target.value,{scene:false});
+  num('#zW','w',.2); num('#zD','d',.2); num('#zH','h',0); num('#zR','rot'); num('#zX','x'); num('#zZ','z');
+  $('#zCol').onchange=e=>commit(()=>z.color=e.target.value);
+  $('#zNote').onchange=e=>commit(()=>z.note=e.target.value,{scene:false});
+  $('#zDup').onclick=()=>{ const q={...z,id:uid(),name:z.name+' (copie)',x:clamp(z.x+z.w+.5,0,state.terrain.w)}; commit(()=>state.zones.push(q)); select({kind:'zone',id:q.id}); };
+  $('#zDel').onclick=async()=>{ const n=inside.length; const alsoPlants = n? await ask('Supprimer la zone ?',`${n} plante(s) s'y trouvent. Elles seront aussi retirées.`,'Supprimer'): true; if(!alsoPlants) return; commit(()=>{ state.zones=state.zones.filter(q=>q.id!==z.id); const ids=new Set(inside.map(p=>p.id)); state.plants=state.plants.filter(p=>!ids.has(p.id)); }); select(null); };
+  const fb=$('#fillBtn'); if(fb) fb.onclick=()=>{ const sp=$('#fillSp').value, d=$('#fillDate').value||iso(view.y,5,20); let n=0; commit(()=>{ n=fillZone(state,z,sp,d).length; }); toast(`${n} plants de ${SP[sp].n} ajoutés`); };
+}
+function summary(){
+  const area=lotsArea(); const byType={}; state.zones.forEach(z=>byType[z.type]=(byType[z.type]||0)+z.w*z.d);
+  const vis=state.plants.filter(p=>growth(p,view.y,view.m).vis && !growth(p,view.y,view.m).ghost).length;
+  const planned=state.plants.filter(isPlanned).length;
+  const tasks=tasksFor(view.y).filter(t=>t.m===view.m);
+  const species=new Set(state.plants.map(p=>p.sp)).size;
+  return `<div class="stack">
+    ${state.example?`<div class="banner"><b>Plan d'exemple</b><br>Explore-le, puis crée ton terrain dans l'onglet <b>Terrain</b> (dimensions, photo aérienne) ou modifie directement celui-ci.</div>`:''}
+    <div><h2>${esc(state.terrain.name)}</h2><p class="hint num">${(state.terrain.lots||[]).length? state.terrain.lots.map(l=>esc(l.name)+' : '+fmt(l.area,1)+' m²').join(' · ')+' · total '+fmt(area,1)+' m²' : fmt(state.terrain.w)+' × '+fmt(state.terrain.d)+' m · '+fmt(area,0)+' m²'} · zone ${esc(state.terrain.zone)}</p></div>
+    <div class="bigstats"><div class="stat"><b>${vis}</b><span>plantes visibles en ${MOIS[view.m-1]} ${view.y}</span></div><div class="stat"><b>${species}</b><span>espèces au plan</span></div>
+    <div class="stat"><b>${planned}</b><span>plantations planifiées</span></div><div class="stat"><b>${state.zones.length}</b><span>zones</span></div></div>
+    <div><p style="margin:0 0 4px;font-size:12px;color:var(--muted)">Occupation du terrain</p><div class="list">${Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="li"><span><i class="sw" style="display:inline-block;vertical-align:-2px;margin-right:6px;background:${ZT[k].border||ZT[k].col}"></i>${ZT[k].n}</span><span class="num">${fmt(v,0)} m² · ${fmt(v/area*100,0)} %</span></div>`).join('')||'<p class="hint">Aucune zone.</p>'}</div></div>
+    <div><p style="margin:0 0 4px;font-size:12px;color:var(--muted)">À faire en ${MOISL[view.m-1]} ${view.y}</p>${tasks.length?`<div class="list">${tasks.slice(0,8).map(t=>`<div class="li"><span>${esc(t.title)}${t.n>1?` <span class="num">×${t.n}</span>`:''}</span><span class="kind k-${t.kind}">${KINDS[t.kind]}</span></div>`).join('')}</div>${tasks.length>8?`<button class="btn sm" id="seeCal" style="margin-top:6px">Voir les ${tasks.length} tâches</button>`:''}`:'<p class="hint">Rien de prévu ce mois-ci.</p>'}</div>
+    <p class="hint">Clique sur un élément du terrain pour le modifier. Glisse un élément sélectionné pour le déplacer. Raccourcis : Échap (sélection), Suppr (supprimer), Ctrl+Z (annuler).</p></div>`;
+}
+function bindSummary(){ const b=$('#seeCal'); if(b) b.onclick=()=>{ view.calY=view.y; showTab('cal'); }; }
+
+let currentTab='veg';
+function showTab(t){
+  currentTab=t; document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id==='p-'+t));
+  renderPanels();
+}
+function renderPanels(){
+  renderHeader(); renderInspector();
+  if(currentTab==='veg') renderSpecies();
+  if(currentTab==='zones'){ renderZoneTools(); renderZoneList(); }
+  if(currentTab==='cal') renderCalendar();
+  if(currentTab==='proj') renderProjections();
+  if(currentTab==='rec') renderHarvests();
+  if(currentTab==='ter') renderTerrainForm();
+  if(currentTab==='jour') renderJournal();
+  if(currentTab==='site') renderSite();
+}
+function renderAll(){ renderCatChips(); renderPanels(); updateSun(); }
+
+/* =========================================================
+   Liaisons
+   ========================================================= */
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+$('#q').oninput=e=>{view.q=e.target.value;renderSpecies();};
+$('#yr').oninput=e=>setTime(+e.target.value,null);
+$('#mo').oninput=e=>setTime(null,+e.target.value);
+$('#hr').oninput=e=>setTime(null,null,+e.target.value);
+$('#today').onclick=()=>setTime(Y0,M0);
+$('#v3d').onclick=()=>setupCamera('3d'); $('#vplan').onclick=()=>setupCamera('plan');
+$('#undo').onclick=undo; $('#selMode').onclick=()=>setMode('select');
+$('#optGrid').onchange=e=>grid.visible=e.target.checked;
+$('#optShadow').onchange=e=>{ sun.castShadow=e.target.checked; };
+$('#optRings').onchange=()=>updateAllPlants();
+let playT=null;
+$('#play').onclick=()=>{
+  if(playT){ clearInterval(playT); playT=null; $('#play').textContent='▶ Animer'; return; }
+  $('#play').textContent='❚❚ Pause';
+  playT=setInterval(()=>{ let y=view.y, m=view.m+1; if(m>12){m=1;y++;} if(y>Y0+15){ clearInterval(playT); playT=null; $('#play').textContent='▶ Animer'; return; } setTime(y,m); },window.matchMedia('(prefers-reduced-motion: reduce)').matches?900:350);
+};
+$('#calPrev').onclick=()=>{view.calY=(view.calY??view.y)-1;renderCalendar();};
+$('#calNext').onclick=()=>{view.calY=(view.calY??view.y)+1;renderCalendar();};
+$('#tDate').value=TODAY_ISO;
+$('#taskForm').onsubmit=e=>{ e.preventDefault(); const t={id:uid(),title:$('#tTitle').value.trim(),date:$('#tDate').value,done:false}; if(!t.title||!t.date) return; commit(()=>state.tasks.push(t),{scene:false}); view.calY=pd(t.date).y; $('#tTitle').value=''; renderCalendar(); };
+$('#recForm').onsubmit=e=>{ e.preventDefault(); const h={id:uid(),sp:$('#rSp').value,date:$('#rDate').value,qty:+$('#rQty').value,unit:$('#rUnit').value,note:$('#rNote').value.trim()}; if(!h.qty) return; commit(()=>state.harvests.push(h),{scene:false}); $('#rQty').value=''; $('#rNote').value=''; toast('Récolte notée'); };
+$('#carry').onclick=async()=>{
+  const Y=view.y; const ann=state.plants.filter(p=>SP[p.sp]?.life==='annuelle' && pd(p.date).y===Y);
+  if(!ann.length){ toast(`Aucune annuelle plantée en ${Y}`); return; }
+  if(!await ask(`Copier ${ann.length} plants vers ${Y+1} ?`,'Les annuelles seront dupliquées aux mêmes emplacements, datées de l\'année suivante.','Copier')) return;
+  commit(()=>ann.forEach(p=>{ const d=pd(p.date); state.plants.push({...p,id:uid(),date:iso(d.y+1,d.m,d.d)}); }));
+  setTime(Y+1,7); toast('Annuelles copiées. Consulte les alertes de rotation.');
+};
+const tnum=(id,key,min,max)=>$(id).onchange=e=>{ const v=+e.target.value; if(!isFinite(v)) return; commit(()=>state.terrain[key]=clamp(v,min,max)); buildGround(); rebuildScene(); setupCamera(view.cam); updateSun(); };
+$('#fName').onchange=e=>commit(()=>state.terrain.name=e.target.value||'Mon terrain',{scene:false});
+tnum('#fW','w',5,400); tnum('#fD','d',5,400);
+$('#fLat').onchange=e=>{ commit(()=>state.terrain.lat=clamp(+e.target.value,-70,70),{scene:false}); updateSun(); };
+$('#fNorth').onchange=e=>{ commit(()=>state.terrain.north=clamp(+e.target.value,-180,180),{scene:false}); updateSun(); };
+$('#fZone').onchange=e=>commit(()=>state.terrain.zone=e.target.value,{scene:false});
+$('#fSnap').onchange=e=>commit(()=>state.terrain.snap=+e.target.value,{scene:false});
+$('#fFrost1').onchange=e=>{ if(/^\d{2}-\d{2}$/.test(e.target.value)) commit(()=>state.terrain.frost1=e.target.value,{scene:false}); else toast('Format attendu : MM-JJ, par exemple 05-20'); };
+$('#fFrost2').onchange=e=>{ if(/^\d{2}-\d{2}$/.test(e.target.value)) commit(()=>state.terrain.frost2=e.target.value,{scene:false}); else toast('Format attendu : MM-JJ, par exemple 09-25'); };
+$('#fOp').oninput=e=>{ state.terrain.photoOp=+e.target.value; if(photoPlane) photoPlane.material.opacity=state.terrain.photoOp; scheduleSave(); };
+$('#fPhoto').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
+  rd.onload=()=>{ const img=new Image(); img.onload=()=>{
+    let max=1600, q=.75, out='';
+    for(let i=0;i<8;i++){ const k=Math.min(1,max/Math.max(img.width,img.height)); const c=document.createElement('canvas'); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k); c.getContext('2d').drawImage(img,0,0,c.width,c.height); out=c.toDataURL('image/jpeg',q); if(out.length<240000) break; max*=.82; q=Math.max(.5,q-.05); }
+    photo=out; applyPhoto(); savePhoto(); toast('Photo appliquée au terrain'); };
+    img.onerror=()=>toast('Image illisible. Essaie un fichier JPEG ou PNG.'); img.src=rd.result; };
+  rd.readAsDataURL(f); e.target.value='';
+};
+$('#rmPhoto').onclick=()=>{ photo=null; applyPhoto(); savePhoto(); };
+$('#exp').onclick=async()=>{
+  const json=JSON.stringify({...state,photo},null,1); const name=`terrain-${(state.terrain.name||'plan').toLowerCase().normalize('NFD').replace(/[^\w]+/g,'-').slice(0,30)}-${TODAY_ISO}.json`;
+  try{ const dl=window.claude && await window.claude.use('downloads'); if(dl){ await dl.save({filename:name,data:json}); toast('Fichier exporté'); return; } }catch(e){ if(e && e.code && e.code!=='not_granted'){ toast('Export annulé'); return; } }
+  if(!window.claude){ try{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([json],{type:'application/json'})); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000); toast('Fichier exporté'); return; }catch(e){} }
+  showJson(json);
+};
+$('#copyJson').onclick=()=>showJson(JSON.stringify(state));
+function showJson(json){
+  modal(`<h2 style="font-size:17px">Copie de ton plan</h2><p class="hint">Copie ce texte et colle-le dans un fichier .json pour le conserver. Tu pourras le réimporter avec « Importer… ».</p><textarea readonly id="jtxt"></textarea><div class="row" style="justify-content:flex-end"><button class="btn" id="jclose">Fermer</button><button class="btn primary" id="jcopy">Copier</button></div>`, b=>{
+    b.querySelector('#jtxt').value=json; b.querySelector('#jclose').onclick=closeModal;
+    b.querySelector('#jcopy').onclick=async()=>{ try{ await navigator.clipboard.writeText(json); toast('Copié dans le presse-papiers'); }catch(e){ const t=b.querySelector('#jtxt'); t.select(); toast('Sélectionné : fais Ctrl+C'); } };
+  });
+}
+$('#imp').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
+  rd.onload=async()=>{ try{ const s=JSON.parse(rd.result); if(!s||!Array.isArray(s.plants)||!Array.isArray(s.zones)||!s.terrain) throw 0;
+    if(!await ask('Remplacer le plan actuel ?','Le plan importé remplacera celui affiché. Tu peux annuler ensuite avec Ctrl+Z.','Importer')) return;
+    const ph=s.photo||null; delete s.photo; s.tasks=s.tasks||[]; s.done=s.done||{}; s.harvests=s.harvests||[];
+    commit(()=>{state=migrate(s);}); if(ph!==null){ photo=ph; savePhoto(); } buildGround(); rebuildScene(); setupCamera(view.cam); renderAll(); toast('Plan importé');
+  }catch(err){ toast('Ce fichier n\'est pas un plan valide.'); } };
+  rd.readAsText(f); e.target.value='';
+};
+$('#blank').onclick=async()=>{
+  if(!await ask('Créer un terrain vierge ?','Le plan actuel sera remplacé par un terrain vide de 30 × 20 m. Exporte-le d\'abord si tu veux le garder.','Créer')) return;
+  commit(()=>{ state=blankState(); }); view.sel=null; buildGround(); rebuildScene(); setupCamera(view.cam); renderAll(); showTab('ter');
+};
+$('#loadReal').onclick=async()=>{
+  if(!await ask('Recharger le plan de ton terrain ?','Le plan actuel sera remplacé par les lots 5 511 832 et 5 511 834 tels que relevés au certificat de localisation de 2019. Tu peux annuler ensuite avec Ctrl+Z.','Recharger')) return;
+  const keep={media:state.media,models:state.models,harvests:state.harvests,tasks:state.tasks};
+  commit(()=>{ state=Object.assign(realState(),keep); }); view.sel=null; buildGround(); rebuildScene(); setupCamera(view.cam); renderAll();
+};
+$('#example').onclick=async()=>{
+  if(!await ask('Recharger l\'exemple ?','Le plan actuel sera remplacé par le terrain d\'exemple.','Recharger')) return;
+  commit(()=>{ state=exampleState(); }); state.example=true; view.sel=null; buildGround(); rebuildScene(); setupCamera(view.cam); renderAll();
+};
+$('#modal').onclick=e=>{ if(e.target.id==='modal') closeModal(); };
+window.addEventListener('keydown',e=>{
+  const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName);
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z' && !typing){ e.preventDefault(); undo(); return; }
+  if(typing) return;
+  if(e.key==='Escape'){ if($('#modal').classList.contains('on')) closeModal(); else { setMode('select'); select(null); } }
+  if((e.key==='Delete'||e.key==='Backspace') && view.sel){ e.preventDefault(); const s=view.sel; commit(()=>{ if(s.kind==='plant') state.plants=state.plants.filter(p=>p.id!==s.id); else if(s.kind==='model') state.models=state.models.filter(m=>m.id!==s.id); else state.zones=state.zones.filter(z=>z.id!==s.id); }); select(null); }
+});
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{ buildGround(); rebuildScene(); updateSun(); });
+new MutationObserver(()=>{ buildGround(); rebuildScene(); updateSun(); }).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* =========================================================
+   Mon site : climat de Chicoutimi (station Bagotville)
+   ========================================================= */
+const CLIM={
+  tmin:[-20.4,-18.7,-11.8,-3.2,3.8,9.6,12.9,11.8,6.9,1.4,-5.4,-13.9],
+  tmean:[-15.1,-13.1,-6.3,2.1,10.2,16.0,18.7,17.6,12.6,5.7,-1.5,-9.5],
+  tmax:[-9.7,-7.4,-0.7,7.4,16.6,22.3,24.5,23.4,18.2,9.9,2.3,-5.1],
+  prec:[58,48,58,61,78,89,112,100,102,91,67,63],
+};
+const DAYS=[31,28,31,30,31,30,31,31,30,31,30,31];
+const gddEst=()=>CLIM.tmean.reduce((a,t,i)=>a+Math.max(0,t-5)*DAYS[i],0);
+function climateChart(elm){
+  const W=330,H=170,pl=30,pb=18,pt=8,lo=-25,hi=30; const bw=(W-pl)/12; const y=v=>pt+(H-pt-pb)*(hi-v)/(hi-lo);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Températures mensuelles à Bagotville">`;
+  [-20,-10,0,10,20,30].forEach(v=>{ s+=`<line x1="${pl}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="${v===0?'var(--muted)':'var(--line)'}" stroke-width="1"/><text x="${pl-5}" y="${y(v)+3.5}" text-anchor="end" font-size="10" fill="var(--muted)" font-family="IBM Plex Mono">${v}</text>`; });
+  for(let i=0;i<12;i++){
+    const x=pl+i*bw+bw*.3, w=bw*.4, a=y(CLIM.tmax[i]), b=y(CLIM.tmin[i]);
+    s+=`<g data-i="${i}" style="cursor:default"><rect x="${pl+i*bw}" y="${pt}" width="${bw}" height="${H-pt-pb}" fill="transparent"/><rect x="${x}" y="${a}" width="${w}" height="${b-a}" rx="4" fill="${CLIM.tmean[i]>=5?'var(--accent)':'var(--k-semis)'}" opacity="${i+1===view.m?1:.6}"/><line x1="${x-2}" x2="${x+w+2}" y1="${y(CLIM.tmean[i])}" y2="${y(CLIM.tmean[i])}" stroke="var(--ink)" stroke-width="2"/></g>`;
+    s+=`<text x="${pl+i*bw+bw/2}" y="${H-5}" text-anchor="middle" font-size="9.5" fill="var(--muted)" font-family="IBM Plex Mono">${'JFMAMJJASOND'[i]}</text>`;
+  }
+  s+='</svg>';
+  elm.innerHTML=`<div class="ct">Températures normales (°C) : minimum à maximum, trait = moyenne. En vert, les mois où la moyenne dépasse 5 °C (croissance active).</div>${s}`;
+  elm.querySelectorAll('g[data-i]').forEach(g=>{ const i=+g.dataset.i;
+    g.onmousemove=e=>{ ctip.style.display='block'; ctip.style.left=(e.clientX+12)+'px'; ctip.style.top=(e.clientY-30)+'px'; ctip.textContent=`${MOISL[i]} : ${fmt(CLIM.tmin[i])} à ${fmt(CLIM.tmax[i])} °C, moyenne ${fmt(CLIM.tmean[i])} °C, ${CLIM.prec[i]} mm`; };
+    g.onmouseleave=()=>ctip.style.display='none'; });
+}
+function renderSite(){
+  const st=state.site, t=state.terrain;
+  const gdd=Math.round(gddEst()/10)*10;
+  $('#siteStats').innerHTML=`
+    <div class="stat"><b>${esc(t.zone)}</b><span>zone de rusticité (RNCan, normales 1991-2020)</span></div>
+    <div class="stat"><b>${fmt(gdd,0)}</b><span>degrés-jours base 5 °C par an (estimé)</span></div>
+    <div class="stat"><b>≈ 28 mai</b><span>dernier gel printanier (1 an sur 3 plus tard)</span></div>
+    <div class="stat"><b>≈ 17 sept.</b><span>premier gel automnal (1 an sur 3 plus tôt)</span></div>
+    <div class="stat"><b>≈ 111 j</b><span>saison sans gel</span></div>
+    <div class="stat"><b>${fmt(CLIM.prec.reduce((a,b)=>a+b,0),0)} mm</b><span>précipitations annuelles (pluie et neige)</span></div>`;
+  climateChart($('#chClimate'));
+  $('#climTbl').innerHTML=`<thead><tr><th>Mois</th><th>Min</th><th>Moy.</th><th>Max</th><th>Précip.</th><th>DJ 5</th></tr></thead><tbody>${CLIM.tmean.map((m,i)=>`<tr data-m="${i+1}" class="${i+1===view.m?'cur':''}"><td style="font-family:var(--body)">${MOISL[i]}</td><td>${fmt(CLIM.tmin[i])}</td><td>${fmt(m)}</td><td>${fmt(CLIM.tmax[i])}</td><td>${CLIM.prec[i]}</td><td>${fmt(Math.max(0,m-5)*DAYS[i],0)}</td></tr>`).join('')}</tbody>`;
+  $('#climTbl').querySelectorAll('tr[data-m]').forEach(tr=>tr.onclick=()=>setTime(null,+tr.dataset.m));
+  $('#climSrc').textContent='Normales mensuelles de la station Bagotville A, la station de référence la plus proche (environ 20 km du terrain). Dates de gel : normales 1981-2010 d\'Environnement Canada pour Bagotville. Les degrés-jours sont calculés ici à partir des moyennes mensuelles ; les valeurs régionales publiées par le MAPAQ sont d\'environ 1 400 DJ sur la saison de croissance.';
+  const notHardy=SPECIES.filter(s=>s.life!=='annuelle' && s.zone>parseInt(t.zone));
+  $('#siteGdd').innerHTML=`<b>Ce que ça change pour ton jardin</b>
+    <ul style="margin:6px 0 0;padding-left:18px;font-size:13px">
+    <li>Chicoutimi est passée de la zone 3a à la zone 3b avec les normales récentes : choisis des vivaces, arbres et arbustes rustiques en zone 3 ou moins.</li>
+    <li>À protéger ou placer près d'un mur au sud : ${notHardy.map(s=>esc(s.n)).join(', ')}.</li>
+    <li>Ne sors les plants tendres (tomates, courges, basilic) qu'au début de juin ; le calendrier de l'app utilise le 28 mai comme dernier gel.</li>
+    <li>Saison courte : préfère les variétés hâtives (55 à 75 jours) et démarre tomates et poivrons à l'intérieur en mars-avril.</li>
+    <li>D'ici 2050, le MAPAQ prévoit pour la région environ 460 degrés-jours de plus et un dernier gel deux semaines plus tôt : les projections à long terme de l'app restent prudentes.</li></ul>`;
+  const L=t.lidar, es=elevStats();
+  $('#siteGeo').innerHTML = L ? `<b>Relief et géoréférencement (LiDAR du Québec)</b>
+    <dl class="facts" style="margin:6px 0 0"><dt>Tuile</dt><dd class="num">${esc(L.tile)} · ${esc(L.date)}</dd><dt>Système</dt><dd>${esc(L.crs)}</dd>
+    ${es?`<dt>Altitude</dt><dd class="num">${fmt(es.mn,1)} à ${fmt(es.mx,1)} m dans les lots</dd>`:''}
+    <dt>Maison</dt><dd class="num">X ${fmt(L.house[0],2)} · Y ${fmt(L.house[1],2)}</dd>
+    <dt>Rotation du plan</dt><dd class="num">${fmt(L.rot,2)}° par rapport au nord MTM</dd></dl>
+    <details style="margin-top:6px"><summary style="cursor:pointer;font-size:13px">Coordonnées MTM des coins des lots</summary><table class="tbl" style="margin-top:6px"><thead><tr><th>Lot</th><th>X (m)</th><th>Y (m)</th></tr></thead><tbody>${Object.entries(L.corners).map(([n,pts])=>pts.map((q,i)=>`<tr><td style="font-family:var(--body)">${i?'':esc(n)}</td><td>${fmt(q[0],2)}</td><td>${fmt(q[1],2)}</td></tr>`).join('')).join('')}</tbody></table></details>
+    <p class="hint" style="margin-top:6px">Calage obtenu en superposant la maison et les deux remises du certificat aux bâtiments du LiDAR. Précision estimée : environ 0,5 m. Pour atteindre ±10 cm, mesure les deux repères d'arpentage au GNSS RTK et entre leurs coordonnées.</p>` : '';
+  $('#sAddr').value=st.addr||''; $('#sLot').value=st.lot||''; $('#sArea').value=st.area||''; $('#sLat').value=st.lat; $('#sLon').value=st.lon;
+  $('#sSoil').value=st.soil||''; $('#sPh').value=st.ph||''; $('#sNote').value=st.note||'';
+  const q=encodeURIComponent(st.addr||'70 rue Gauthier Chicoutimi QC'), ll=`${st.lat},${st.lon}`;
+  const links=[
+    ['Vue satellite (Google Maps)',`https://www.google.com/maps/search/?api=1&query=${q}`,'Repère ton terrain, mesure-le (clic droit → Mesurer une distance) et fais une capture pour le fond de plan.'],
+    ['Cadastre du Québec — Infolot','https://www.quebec.ca/habitation-territoire/information-fonciere/cadastre/consulter-cadastre','Limites officielles du lot, superficie et plan téléchargeable. Recherche par adresse ou par numéro de lot.'],
+    ['Registre foncier du Québec','https://www.registrefoncier.gouv.qc.ca','Actes, servitudes et plans d\'arpentage liés à ton lot.'],
+    ['Ville de Saguenay','https://ville.saguenay.ca/','Rôle d\'évaluation, règlements d\'urbanisme (clôtures, haies, piscines), collecte des résidus verts.'],
+    ['Zones de rusticité — Ressources naturelles Canada','https://www.rusticitedesplantes.gc.ca','Carte interactive et cartes de répartition des espèces.'],
+    ['Agrométéo Québec','https://www.agrometeo.org','Degrés-jours accumulés en temps réel, gels et alertes pour les stations du Saguenay.'],
+    ['Normales climatiques — Environnement Canada','https://climat.meteo.gc.ca/climate_normals/index_f.html','Données officielles complètes de la station Bagotville.'],
+    ['Prévisions — MétéoMédia Bagotville','https://www.meteomedia.com/fr/ville/ca/quebec/bagotville/mensuel','Prévisions et moyennes quotidiennes.'],
+    ['Canopée de la région de Saguenay','https://donneesquebec.ca/recherche/dataset/canopee-des-six-rmr-du-quebec','Couvert des arbres autour de ton terrain (Données Québec).'],
+  ];
+  $('#siteLinks').innerHTML=links.map(([n,u,d])=>`<a class="li" href="${u}" target="_blank" rel="noopener"><span>${esc(n)}<small style="display:block;color:var(--muted);font-size:12px">${esc(d)}</small></span><span>↗</span></a>`).join('')+`<p class="hint" style="margin-top:6px">Position approximative du 70, rue Gauthier : ${fmt(st.lat,4)}, ${fmt(st.lon,4)}. Vérifie-la sur la carte et corrige-la au besoin : elle règle la course du soleil et les ombres.</p>`;
+}
+const sf=(id,key,num)=>$(id).onchange=e=>{ let v=e.target.value; if(num){ v=+v; if(!isFinite(v)) return; } commit(()=>{ state.site[key]=v; if(key==='lat') state.terrain.lat=v; },{scene:false}); if(key==='lat') updateSun(); };
+sf('#sAddr','addr'); sf('#sLot','lot'); sf('#sArea','area'); sf('#sLat','lat',true); sf('#sLon','lon',true); sf('#sSoil','soil'); sf('#sPh','ph'); sf('#sNote','note');
+
+/* =========================================================
+   Photos, vidéos (journal) et stockage des fichiers
+   ========================================================= */
+const IDB={db:null,
+  open(){ if(this.db) return Promise.resolve(this.db); return new Promise((res,rej)=>{ try{ const r=indexedDB.open('monterrain',1); r.onupgradeneeded=()=>r.result.createObjectStore('blobs'); r.onsuccess=()=>{this.db=r.result;res(r.result);}; r.onerror=()=>rej(r.error);}catch(e){rej(e);} }); },
+  async put(k,v){ const d=await this.open(); return new Promise((res,rej)=>{ const t=d.transaction('blobs','readwrite'); t.objectStore('blobs').put(v,k); t.oncomplete=()=>res(); t.onerror=()=>rej(t.error); }); },
+  async get(k){ const d=await this.open(); return new Promise((res,rej)=>{ const q=d.transaction('blobs').objectStore('blobs').get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); },
+  async del(k){ const d=await this.open(); return new Promise(res=>{ const t=d.transaction('blobs','readwrite'); t.objectStore('blobs').delete(k); t.oncomplete=()=>res(); t.onerror=()=>res(); }); }
+};
+let assetsCap=null; const urlCache={};
+async function storeBlob(file,allowAssets=true){
+  if(assetsCap && allowAssets && file.size<=20*1024*1024){
+    try{ const r=await assetsCap.upload(file); return {assetId:r.id,url:r.url,where:'compte'}; }catch(e){ /* repli sur l'appareil */ }
+  }
+  const k='b_'+uid(); await IDB.put(k,file); return {idb:k,where:'appareil'};
+}
+async function blobUrl(m){
+  if(m.assetId) return m.url || ('/_blob/'+m.assetId);
+  if(m.idb){ if(urlCache[m.idb]) return urlCache[m.idb]; try{ const b=await IDB.get(m.idb); if(!b) return null; return urlCache[m.idb]=URL.createObjectURL(b); }catch(e){ return null; } }
+  return null;
+}
+async function deleteBlob(m){ try{ if(m.assetId && assetsCap) await assetsCap.delete(m.assetId); if(m.idb) await IDB.del(m.idb); }catch(e){} }
+let mediaFilter='all';
+function refOptions(selected){
+  const zs=state.zones.map(z=>`<option value="zone:${z.id}" ${selected==='zone:'+z.id?'selected':''}>Zone · ${esc(z.name)}</option>`).join('');
+  const seen=new Set(); const ps=state.plants.filter(p=>{ const k=p.sp; if(SP[p.sp].life==='annuelle'){ if(seen.has(k)) return false; seen.add(k);} return true; })
+    .map(p=>{ const s=SP[p.sp]; const z=zoneOfPlant(p); return `<option value="plant:${p.id}" ${selected==='plant:'+p.id?'selected':''}>${esc(s.n)}${z?' · '+esc(z.name):''} (${fmt(p.x,1)} ; ${fmt(p.z,1)})</option>`; }).join('');
+  return `<option value="">Terrain en général</option><optgroup label="Zones">${zs}</optgroup><optgroup label="Plantes">${ps}</optgroup>`;
+}
+function refLabel(ref){
+  if(!ref) return 'Terrain'; const [k,id]=ref.split(':');
+  if(k==='zone'){ const z=state.zones.find(z=>z.id===id); return z? z.name : 'Zone supprimée'; }
+  const p=state.plants.find(p=>p.id===id); return p? SP[p.sp].n : 'Plante supprimée';
+}
+async function addMediaFiles(files,ref){
+  if(!files.length) return; toast(`Enregistrement de ${files.length} fichier(s)…`);
+  const added=[];
+  for(const f of files){
+    const isVid=f.type.startsWith('video'); const date=ISO(new Date(f.lastModified||Date.now()));
+    try{ const loc=await storeBlob(f); added.push({id:uid(),type:isVid?'video':'image',name:f.name,date,note:'',ref:ref||'',...loc}); }
+    catch(e){ toast(`Impossible d'enregistrer ${f.name}`); }
+  }
+  if(added.length){ commit(()=>state.media.push(...added),{scene:false}); const dev=added.filter(a=>a.where==='appareil').length; toast(dev? `${added.length} ajouté(s), dont ${dev} gardé(s) sur cet appareil seulement` : `${added.length} ajouté(s) à ton journal`); }
+}
+async function renderMediaInto(container,list,compact){
+  if(compact){
+    container.innerHTML=list.map(m=>m.type==='video'?`<video data-id="${m.id}" muted preload="metadata" controls></video>`:`<img data-id="${m.id}" alt="${esc(m.note||m.name||'Photo')}">`).join('');
+  } else {
+    container.innerHTML=list.map(m=>`<div class="media">${m.type==='video'?`<video data-id="${m.id}" controls preload="metadata"></video>`:`<img data-id="${m.id}" alt="${esc(m.note||m.name||'Photo du terrain')}">`}
+      <div class="mb"><span class="num">${m.date}${m.where==='appareil'?' · sur cet appareil':''}</span>
+      <input data-note="${m.id}" value="${esc(m.note)}" placeholder="Légende" aria-label="Légende">
+      <select data-ref="${m.id}" aria-label="Associé à">${refOptions(m.ref)}</select>
+      <div class="acts">${m.type==='image'?`<button class="btn sm" data-bg="${m.id}">Fond du terrain</button>`:''}<button class="btn sm danger" data-mdel="${m.id}">Supprimer</button></div></div></div>`).join('') || '<p class="hint">Aucune photo pour l\'instant.</p>';
+  }
+  for(const m of list){ const elx=container.querySelector(`[data-id="${m.id}"]`); if(!elx) continue; blobUrl(m).then(u=>{ if(u) elx.src=u; else elx.replaceWith(Object.assign(document.createElement('div'),{className:'hint',textContent:'Fichier indisponible sur cet appareil'})); }); }
+  container.querySelectorAll('[data-note]').forEach(i=>i.onchange=()=>{ const m=state.media.find(x=>x.id===i.dataset.note); commit(()=>m.note=i.value,{scene:false}); });
+  container.querySelectorAll('[data-ref]').forEach(i=>i.onchange=()=>{ const m=state.media.find(x=>x.id===i.dataset.ref); commit(()=>m.ref=i.value,{scene:false}); });
+  container.querySelectorAll('[data-mdel]').forEach(b=>b.onclick=async()=>{ const m=state.media.find(x=>x.id===b.dataset.mdel); if(!await ask('Supprimer ce fichier ?','Il sera retiré du journal et de ton espace de stockage.','Supprimer')) return; await deleteBlob(m); commit(()=>state.media=state.media.filter(x=>x.id!==m.id),{scene:false}); });
+  container.querySelectorAll('[data-bg]').forEach(b=>b.onclick=async()=>{ const m=state.media.find(x=>x.id===b.dataset.bg); const u=await blobUrl(m); if(!u) return; const img=new Image(); img.crossOrigin='anonymous'; img.onload=()=>{ photo=compressImg(img); applyPhoto(); savePhoto(); toast('Photo utilisée comme fond du terrain. Ajuste les dimensions dans l\'onglet Terrain.'); }; img.onerror=()=>toast('Image illisible'); img.src=u; });
+}
+function compressImg(img){ try{ return compressImg2(img); }catch(e){ toast('Cette image ne peut pas servir de fond. Importe-la depuis l\'onglet Terrain.'); return photo; } }
+function compressImg2(img){ let max=1600,q=.75,out=''; for(let i=0;i<8;i++){ const k=Math.min(1,max/Math.max(img.width,img.height)); const c=document.createElement('canvas'); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k); c.getContext('2d').drawImage(img,0,0,c.width,c.height); out=c.toDataURL('image/jpeg',q); if(out.length<240000) break; max*=.82; q=Math.max(.5,q-.05);} return out; }
+function renderJournal(){
+  const sel=view.sel? `${view.sel.kind}:${view.sel.id}`:''; const r=$('#mRef'); const cur=r.value||sel; r.innerHTML=refOptions(cur); r.value=cur;
+  $('#mediaWhere').textContent = assetsCap ? 'Les fichiers sont enregistrés dans ton espace Claude (20 Mo max. par fichier) et visibles sur tous tes appareils. Les vidéos plus lourdes restent sur cet appareil.' : 'Les fichiers sont gardés dans ce navigateur, sur cet appareil seulement.';
+  const n=state.media.length, nI=state.media.filter(m=>m.type==='image').length;
+  $('#mFilter').innerHTML=[['all',`Tout (${n})`],['image',`Photos (${nI})`],['video',`Vidéos (${n-nI})`],['sel','Élément sélectionné']].map(([k,v])=>`<button class="chip" data-f="${k}" aria-pressed="${mediaFilter===k}">${v}</button>`).join('');
+  $('#mFilter').querySelectorAll('button').forEach(b=>b.onclick=()=>{mediaFilter=b.dataset.f;renderJournal();});
+  let list=state.media.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(mediaFilter==='image'||mediaFilter==='video') list=list.filter(m=>m.type===mediaFilter);
+  if(mediaFilter==='sel') list=list.filter(m=>m.ref && m.ref===sel);
+  renderMediaInto($('#gallery'),list,false);
+  $('#modelList').innerHTML=state.models.map(m=>`<button class="li" data-id="${m.id}"><span>${esc(m.name)}</span><span class="num">${fmt(m.size,1)} m</span></button>`).join('') || '<p class="hint">Aucun modèle importé.</p>';
+  $('#modelList').querySelectorAll('.li').forEach(b=>b.onclick=()=>select({kind:'model',id:b.dataset.id}));
+}
+['#camIn','#vidIn','#mediaIn'].forEach(id=>$(id).onchange=e=>{ addMediaFiles([...e.target.files],$('#mRef').value); e.target.value=''; });
+function mediaStripHtml(ref){ const n=state.media.filter(m=>m.ref===ref).length; return `<div><p style="margin:0 0 4px;font-size:12px;color:var(--muted)">Photos et vidéos (${n})</p><div class="strip" id="strip"></div><label class="btn sm" for="stripIn" style="margin-top:4px">+ Ajouter une photo</label><input id="stripIn" type="file" accept="image/*,video/*" multiple hidden></div>`; }
+function bindMediaStrip(ref){
+  const list=state.media.filter(m=>m.ref===ref).sort((a,b)=>b.date.localeCompare(a.date));
+  renderMediaInto($('#strip'),list,true);
+  $('#stripIn').onchange=e=>{ addMediaFiles([...e.target.files],ref); e.target.value=''; };
+}
+
+/* =========================================================
+   Modèles 3D importés (photogrammétrie)
+   ========================================================= */
+const modelGroup=new THREE.Group(); world.add(modelGroup); const modelObjs=new Map();
+const gltfLoader = THREE.GLTFLoader ? new THREE.GLTFLoader() : null;
+async function loadModel(m){
+  if(!gltfLoader) return; const u=await blobUrl(m); if(!u) return;
+  gltfLoader.load(u,g=>{
+    const root=g.scene; const box=new THREE.Box3().setFromObject(root); const size=new THREE.Vector3(); box.getSize(size); const c=new THREE.Vector3(); box.getCenter(c);
+    root.position.set(-c.x,-box.min.y,-c.z); const wrap=new THREE.Group(); wrap.add(root);
+    wrap.userData={mid:m.id,native:Math.max(size.x,size.z,1e-6)};
+    root.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.userData.mid=m.id; pickables.push(o); } });
+    const old=modelObjs.get(m.id); if(old) modelGroup.remove(old);
+    modelObjs.set(m.id,wrap); modelGroup.add(wrap); placeModel(m);
+  },undefined,()=>toast(`Modèle « ${m.name} » illisible`));
+}
+function placeModel(m){ const w=modelObjs.get(m.id); if(!w) return; const k=m.size/w.userData.native; w.scale.setScalar(k); const [wx,wz]=toW(m.x,m.z); w.position.set(wx,m.y||0,wz); w.rotation.y=-(m.rot||0)*Math.PI/180; }
+function syncModels(){
+  for(const [id,w] of modelObjs){ if(!state.models.find(m=>m.id===id)){ modelGroup.remove(w); modelObjs.delete(id); } }
+  for(const m of state.models){ if(modelObjs.has(m.id)){ placeModel(m); modelObjs.get(m.id).traverse(o=>{ if(o.isMesh && !pickables.includes(o)) pickables.push(o); }); } else loadModel(m); }
+}
+$('#glbIn').onchange=async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  if(!gltfLoader){ toast('Le lecteur de modèles 3D n\'a pas pu se charger.'); return; }
+  toast('Import du modèle…');
+  try{ const loc=await storeBlob(f,false); const m={id:uid(),name:f.name.replace(/\.(glb|gltf)$/i,''),x:state.terrain.w/2,z:state.terrain.d/2,y:0,rot:0,size:4,...loc};
+    commit(()=>state.models.push(m)); select({kind:'model',id:m.id}); toast('Modèle importé : règle sa taille réelle dans la fiche'); }
+  catch(err){ toast('Import impossible : '+(err&&err.message||'fichier trop lourd ?')); }
+};
+function modelSheet(m){
+  $('#right').innerHTML=`<div class="stack"><div><span class="badge">Modèle 3D</span></div>
+    <div class="field"><label for="mName">Nom</label><input id="mName" value="${esc(m.name)}"></div>
+    <div class="row"><div class="field"><label for="mSize">Plus grande dimension au sol (m)</label><input id="mSize" type="number" step="0.1" min="0.1" value="${m.size}"></div><div class="field"><label for="mRot">Angle (°)</label><input id="mRot" type="number" step="5" value="${m.rot||0}"></div></div>
+    <div class="row"><div class="field"><label for="mX">Centre x (m)</label><input id="mX" type="number" step="0.1" value="${m.x}"></div><div class="field"><label for="mZ">Centre y (m)</label><input id="mZ" type="number" step="0.1" value="${m.z}"></div><div class="field"><label for="mY">Élévation (m)</label><input id="mY" type="number" step="0.05" value="${m.y||0}"></div></div>
+    <p class="hint">Mesure l'objet réel (au ruban ou sur la vue satellite) et entre sa plus grande dimension : le modèle sera mis à l'échelle. Glisse-le sur le terrain pour le déplacer. Le fichier est gardé sur cet appareil.</p>
+    <button class="btn danger" id="mDel">Supprimer le modèle</button></div>`;
+  const num=(id,key,min)=>$(id).onchange=e=>{ const v=+e.target.value; if(isFinite(v)) commit(()=>m[key]=min!=null?Math.max(min,v):v,{scene:false}); placeModel(m); };
+  num('#mSize','size',.1); num('#mRot','rot'); num('#mX','x'); num('#mZ','z'); num('#mY','y');
+  $('#mName').onchange=e=>commit(()=>m.name=e.target.value,{scene:false});
+  $('#mDel').onclick=async()=>{ if(!await ask('Supprimer ce modèle ?','Le fichier 3D sera retiré de cet appareil.','Supprimer')) return; await deleteBlob(m); commit(()=>state.models=state.models.filter(x=>x.id!==m.id)); select(null); };
+}
+
+/* =========================================================
+   Démarrage
+   ========================================================= */
+state=null; loadLocal();
+if(!state || state.example){ state=realState(); }
+state=migrate(state);
+buildGround(); rebuildScene(); setupCamera('3d'); renderAll(); loop();
+setSave('Chargement…');
+initCloud();
+if('serviceWorker' in navigator && !/claude|claudeusercontent/.test(location.hostname) && location.protocol==='https:'){ try{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }catch(e){} }
+</script>
+</body>
+</html>
